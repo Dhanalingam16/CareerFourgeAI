@@ -1,5 +1,9 @@
 import os
+from dotenv import load_dotenv
 from pydantic import BaseModel
+
+# Load backend/.env before reading configuration.
+load_dotenv()
 
 class Settings(BaseModel):
     PROJECT_NAME: str = "CareerFourge AI Job Readiness Engine"

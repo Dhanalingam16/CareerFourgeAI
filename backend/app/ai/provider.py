@@ -20,23 +20,26 @@ class GeminiProvider(BaseAIProvider):
         # Fallback to Mock if API call fails or key missing
         try:
             import requests
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.api_key}"
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={self.api_key}"
+            generation_config = {"responseMimeType": "application/json"}
+            if schema_class is not None and hasattr(schema_class, "model_json_schema"):
+                generation_config["responseSchema"] = schema_class.model_json_schema()
             payload = {
                 "contents": [{"parts": [{"text": prompt + "\n\nReturn valid JSON only."}]}],
-                "generationConfig": {"responseMimeType": "application/json"}
+                "generationConfig": generation_config
             }
             resp = requests.post(url, json=payload, timeout=10)
             if resp.status_code == 200:
                 result_text = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
                 return json.loads(result_text)
         except Exception as e:
-            logger.warning(f"Gemini API call failed, falling back to Mock provider: {e}")
+            logger.warning(f"Gemini API call failed: {e}")
         return MockAIProvider().generate_json(prompt, schema_class)
 
     def generate_text(self, prompt: str) -> str:
         try:
             import requests
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.api_key}"
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={self.api_key}"
             payload = {"contents": [{"parts": [{"text": prompt}]}]}
             resp = requests.post(url, json=payload, timeout=10)
             if resp.status_code == 200:

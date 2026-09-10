@@ -285,6 +285,46 @@ class ReassessmentResponse(BaseModel):
     improved_skills: List[Dict[str, Any]]
     congratulations_message: str
 
+# --- AI Role Roadmap Schemas ---
+class RoadmapNodeSchema(BaseModel):
+    id: str
+    title: str
+    description: str
+    category: str
+    difficulty: str = "Beginner"
+    estimated_hours: int = 4
+    prerequisites: List[str] = []
+    skills: List[str] = []
+    projects: List[str] = []
+    resources: List[str] = []
+
+class RoleRoadmapRequest(BaseModel):
+    target_role: str = "Full Stack Developer"
+    current_skills: List[str] = []
+    skill_gaps: List[str] = []
+    experience_level: str = "Beginner"
+    target_company: Optional[str] = None
+    job_description: Optional[str] = None
+
+class RoleRoadmapResponse(BaseModel):
+    role: str
+    audience: str
+    estimated_months: int
+    summary: str
+    tracks: List[str]
+    nodes: List[RoadmapNodeSchema]
+
+class AITutorRequest(BaseModel):
+    message: str
+    role: str = "Full Stack Developer"
+    current_skills: List[str] = []
+    skill_gaps: List[str] = []
+    roadmap_context: Optional[str] = None
+
+class AITutorResponse(BaseModel):
+    reply: str
+    suggested_actions: List[str] = []
+
 # --- Recruiter Dashboard Schemas ---
 class RecruiterCandidateSchema(BaseModel):
     candidate_id: int

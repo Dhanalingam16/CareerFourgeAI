@@ -9,7 +9,9 @@ import {
   ReadinessScore,
   PersonalizedRoadmap,
   ReassessmentResult,
-  RecruiterDashboard
+  RecruiterDashboard,
+  RoleRoadmap,
+  AITutorResponse
 } from '../types';
 
 const API_BASE = '/api/v1';
@@ -31,6 +33,33 @@ async function fetchJSON<T>(endpoint: string, options?: RequestInit, fallbackDat
 }
 
 export const api = {
+  generateRoleRoadmap: async (payload: {
+    target_role: string;
+    current_skills?: string[];
+    skill_gaps?: string[];
+    experience_level?: string;
+    target_company?: string;
+    job_description?: string;
+  }): Promise<RoleRoadmap> => {
+    return fetchJSON<RoleRoadmap>('/roadmap/generate', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  askAITutor: async (payload: {
+    message: string;
+    role: string;
+    current_skills?: string[];
+    skill_gaps?: string[];
+    roadmap_context?: string;
+  }): Promise<AITutorResponse> => {
+    return fetchJSON<AITutorResponse>('/ai/tutor', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
   // Job Setup
   analyzeJob: async (roleTitle: string, jobDescription?: string): Promise<JobDetails> => {
     return fetchJSON<JobDetails>('/job/analyze', {

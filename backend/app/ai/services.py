@@ -4,9 +4,10 @@ from app.ai.provider import get_ai_provider, BaseAIProvider
 from app.schemas.schemas import (
     JobRequirementSchema, JobAnalysisResponse, ResumeAnalysisResponse,
     SkillTruthItem, SkillTruthResponse, SkillGapItem, JobGapSimulatorResponse,
-    QuestionResponse, AnswerEvaluationResponse, CodingEvaluationResponse,
+    QuestionResponse, AnswerEvaluationResponse, InterviewReportResponse, CodingEvaluationResponse,
     SQLEvaluationResponse, ReadinessBreakdownSchema, RoadmapPrioritySchema,
     RoadmapTaskSchema, PersonalizedRoadmapResponse, ReassessmentResponse,
+    RoleRoadmapRequest, RoleRoadmapResponse, RoadmapNodeSchema, AITutorRequest, AITutorResponse,
     RecruiterCandidateSchema, RecruiterDashboardResponse
 )
 
@@ -679,3 +680,287 @@ class RecruiterService:
             total_applicants=2,
             applicants=applicants
         )
+
+
+class CareerRoadmapAgent:
+    """Gemini-powered roadmap generator and career tutor."""
+    def __init__(self, provider: Optional[BaseAIProvider] = None):
+        self.provider = provider or get_ai_provider()
+
+    def generate_role_roadmap(self, req: RoleRoadmapRequest) -> RoleRoadmapResponse:
+        skills = ", ".join(req.current_skills) or "No confirmed skills yet"
+        gaps = ", ".join(req.skill_gaps) or "No explicit gaps yet"
+        prompt = f"""
+You are CareerForge AI, an expert technical career-roadmap agent.
+Create a practical visual roadmap similar in INFORMATION ARCHITECTURE to modern developer roadmap sites: ordered learning nodes, tracks, prerequisites, projects and resources. Do not copy any site's wording or proprietary content.
+
+Target role: {req.target_role}
+Experience: {req.experience_level}
+Current skills: {skills}
+Skill gaps: {gaps}
+Target company: {req.target_company or 'Not specified'}
+Job description: {req.job_description or 'Not specified'}
+
+Rules:
+- Generate 12-18 nodes in prerequisite order.
+- Group nodes into 3-6 tracks such as Foundations, Core, Frameworks, Data, DevOps, Interview/Projects.
+- Each node must have a concise title and actionable description.
+- Include realistic estimated hours, prerequisites, skills, projects and resource types.
+- Start from the user's level and prioritize the supplied gaps.
+- Include portfolio projects and interview preparation near the end.
+- Use current, widely adopted technologies.
+- Return ONLY JSON matching the schema.
+"""
+        try:
+            data = self.provider.generate_json(prompt, RoleRoadmapResponse)
+            roadmap = RoleRoadmapResponse.model_validate(data)
+
+            # Guard against a model returning a generic/cached Full Stack roadmap
+            # for another role. A roadmap is accepted only when its content has
+            # at least one strong signal for the requested role.
+            role = (req.target_role or "").lower()
+            signal_groups = {
+                "frontend": ["html", "css", "javascript", "react", "typescript", "accessibility"],
+                "backend": ["api", "rest", "sql", "database", "authentication", "redis"],
+                "full stack": ["frontend", "backend", "react", "api", "database"],
+                "android": ["kotlin", "android", "jetpack", "compose"],
+                "ios": ["swift", "swiftui", "xcode", "app store"],
+                "devops": ["docker", "kubernetes", "terraform", "ci/cd", "linux"],
+                "devsecops": ["security", "sast", "rbac", "secrets", "vulnerability"],
+                "data analyst": ["excel", "power bi", "tableau", "statistics", "pandas"],
+                "ai engineer": ["llm", "rag", "agent", "embeddings", "model serving"],
+                "ai and data scientist": ["statistics", "machine learning", "pandas", "experiment"],
+                "data engineer": ["spark", "kafka", "airflow", "etl", "warehouse"],
+                "machine learning": ["machine learning", "scikit", "pytorch", "model evaluation"],
+                "postgresql": ["postgresql", "mvcc", "index", "replication", "partition"],
+                "blockchain": ["blockchain", "solidity", "ethereum", "smart contract"],
+                "qa": ["testing", "selenium", "playwright", "automation", "performance"],
+                "software architect": ["architecture", "distributed", "scalability", "system design"],
+                "api design": ["rest", "openapi", "graphql", "grpc", "api"],
+                "cyber security": ["security", "owasp", "cryptography", "siem", "incident"],
+                "ux design": ["ux", "user research", "wireframe", "prototype", "usability"],
+                "technical writer": ["documentation", "technical writing", "docs", "tutorial"],
+                "game developer": ["game", "unity", "unreal", "physics", "rendering"],
+                "server side game developer": ["game server", "matchmaking", "realtime", "networking"],
+                "mlops": ["mlops", "model registry", "mlflow", "model serving", "monitoring"],
+                "product manager": ["product", "prd", "prioritization", "roadmap", "kpi"],
+                "engineering manager": ["engineering", "leadership", "hiring", "coaching", "delivery"],
+                "developer relations": ["developer", "community", "advocacy", "technical content"],
+                "bi analyst": ["bi", "power bi", "tableau", "dax", "dashboard"],
+                "ai red teaming": ["red team", "prompt injection", "jailbreak", "adversarial", "ai security"],
+            }
+            signals = signal_groups.get(role, [role])
+            content = " ".join(
+                [roadmap.role, roadmap.summary] +
+                [n.title + " " + n.description + " " + " ".join(n.skills) for n in roadmap.nodes]
+            ).lower()
+            if not any(signal in content for signal in signals):
+                raise ValueError(f"AI returned a non-{req.target_role} roadmap")
+
+            return roadmap
+        except Exception:
+            return self._fallback(req)
+
+    def tutor(self, req: AITutorRequest) -> AITutorResponse:
+        # The tutor must answer the user's actual question, not repeat a generic
+        # "highest impact gap" message. Keep the roadmap context compact but useful.
+        prompt = f"""
+You are CareerForge AI Agent, a conversational career mentor.
+
+You MUST answer the user's exact question. Never reuse a generic response just
+ because the question is short. If the user asks "what is HTML", explain HTML.
+If the user asks "frontend", explain frontend development and how it relates to
+their roadmap. If they ask about a roadmap node, explain that specific node.
+
+Target career role: {req.role}
+Current skills: {', '.join(req.current_skills) or 'Not provided'}
+Skill gaps: {', '.join(req.skill_gaps) or 'Not provided'}
+Current roadmap: {req.roadmap_context or 'Not provided'}
+
+User's exact question:
+{req.message}
+
+Response rules:
+- Directly answer the question first.
+- Use simple language suitable for a learner.
+- Give an example when it helps.
+- Relate the answer to the target role/roadmap when relevant.
+- If the user asks a broad topic such as frontend, backend, HTML, CSS, JavaScript,
+  React, DSA, SQL, Docker or Git, give a short explanation plus what to learn next.
+- Do not claim to have performed an action you did not perform.
+- Keep the main answer concise (roughly 80-180 words).
+- Return JSON with `reply` and 2-4 useful `suggested_actions`.
+"""
+        try:
+            data = self.provider.generate_json(prompt, AITutorResponse)
+            return AITutorResponse.model_validate(data)
+        except Exception as exc:
+            # Context-aware local fallback keeps the agent useful even when Gemini
+            # is unavailable, rate-limited, or the API key is missing.
+            text = self._local_tutor_answer(req)
+            return AITutorResponse(
+                reply=text,
+                suggested_actions=self._local_tutor_actions(req.message)
+            )
+
+    def _local_tutor_answer(self, req: AITutorRequest) -> str:
+        q = req.message.strip()
+        ql = q.lower()
+        role = req.role or "your target role"
+
+        topic_answers = {
+            "html": "HTML (HyperText Markup Language) is the structure of a web page. It defines elements such as headings, paragraphs, links, images, forms, buttons and sections. For a frontend career, learn semantic HTML first, then CSS and JavaScript. A good beginner project is a responsive portfolio page.",
+            "css": "CSS controls the appearance and layout of web pages: colors, spacing, typography, responsive design and animations. For frontend development, learn the box model, Flexbox, Grid, responsive media queries and reusable component styling. Practice by recreating a simple landing page.",
+            "javascript": "JavaScript adds behavior and interactivity to web pages. Focus on variables, functions, arrays/objects, DOM events, promises, async/await, modules and API calls. After the fundamentals, move to TypeScript and React if your roadmap targets frontend or full-stack development.",
+            "frontend": "Frontend development is the part of an application users see and interact with. The usual progression is HTML → CSS → JavaScript → TypeScript → React (or another framework) → API integration → testing. For your roadmap, build small projects at each stage rather than only watching tutorials.",
+            "backend": "Backend development handles server-side logic, APIs, authentication, databases and business rules. A practical path is HTTP/REST → one backend language/framework → SQL → authentication → testing → Docker → deployment. Build an API-backed project to connect these skills.",
+            "react": "React is a JavaScript library for building component-based user interfaces. Learn components, props, state, events, hooks, forms, routing and API integration. Start with a small task manager or course dashboard before moving to a larger application.",
+            "dsa": "DSA means Data Structures and Algorithms. For software-engineering interviews, start with arrays and strings, hash maps, stacks/queues, linked lists, trees, heaps, graphs, sorting, binary search and dynamic programming. Always practice explaining time and space complexity.",
+            "sql": "SQL is used to store, query and modify relational data. Learn SELECT, filtering, JOINs, GROUP BY, subqueries, indexes, transactions and window functions. A good project is a course or job-management database with realistic queries.",
+            "docker": "Docker packages an application and its dependencies into a container so it runs consistently across environments. Learn images, containers, Dockerfiles, volumes, networks and Docker Compose. Then containerize your CareerForge backend and database locally.",
+            "git": "Git tracks changes to your code and GitHub hosts repositories for collaboration. Learn clone, status, add, commit, branch, merge, pull, push and pull requests. Use feature branches and meaningful commits on your projects."
+        }
+
+        for keyword, answer in topic_answers.items():
+            if keyword in ql:
+                return answer + f" This is relevant to {role}."
+
+        if "what should i learn" in ql or "learn next" in ql or "start" in ql:
+            first = req.skill_gaps[0] if req.skill_gaps else "the first roadmap node"
+            return f"For {role}, start with {first}. Learn the core concepts, complete one small hands-on exercise, then build a mini-project before moving to the next roadmap node. Your current roadmap is: {req.roadmap_context or 'not loaded yet'}."
+
+        if "why" in ql and req.roadmap_context:
+            return f"That topic appears in your {role} roadmap because it is part of the dependency chain toward the target role. Your current sequence is {req.roadmap_context}. If you tell me the exact node you mean, I can explain why it is required and what you can safely skip."
+
+        return f"For your question, I would focus on the part that directly supports {role}. Your current skills are {', '.join(req.current_skills) or 'not listed'}, and your main gaps are {', '.join(req.skill_gaps) or 'not listed'}. Ask me about a specific roadmap topic, such as HTML, frontend, JavaScript, React, DSA, SQL, Docker or Git, and I will explain it with an example."
+
+    def _local_tutor_actions(self, message: str) -> List[str]:
+        q = message.lower()
+        if "html" in q:
+            return ["Learn semantic HTML", "Build a simple portfolio page", "Practice forms and accessibility"]
+        if "frontend" in q:
+            return ["Learn HTML and CSS", "Practice JavaScript DOM events", "Build a responsive page"]
+        if "backend" in q:
+            return ["Learn HTTP and REST", "Build a small API", "Connect it to SQL"]
+        if "dsa" in q:
+            return ["Practice arrays and hash maps", "Learn Big-O", "Solve 3 problems daily"]
+        return ["Study the concept", "Build a small practice project", "Complete a checkpoint"]
+
+    def _fallback(self, req: RoleRoadmapRequest) -> RoleRoadmapResponse:
+        """Deterministic role-specific fallback. Never show Full Stack content for another role."""
+        raw = (req.target_role or "Full Stack").strip()
+        aliases = {
+            "Software Engineer (Full Stack)": "Full Stack",
+            "Full Stack Developer": "Full Stack",
+            "Frontend Developer": "Frontend",
+            "Backend Developer": "Backend",
+            "Data Scientist": "AI and Data Scientist",
+            "Machine Learning Engineer": "Machine Learning",
+            "DevOps Engineer": "DevOps",
+            "Cybersecurity": "Cyber Security",
+            "Cybersecurity Engineer": "Cyber Security",
+            "QA Engineer": "QA",
+            "Android Developer": "Android",
+            "iOS Developer": "iOS",
+        }
+        role = aliases.get(raw, raw)
+
+        # Each role has its own learning sequence. This is used when Gemini is
+        # unavailable/invalid, so the UI still changes correctly when a role is selected.
+        role_topics = {
+            "Frontend": ["HTML & Accessibility","CSS & Responsive Design","JavaScript","TypeScript","React","State & API Integration","Frontend Testing","Web Performance","Frontend Portfolio","Frontend Interviews"],
+            "Backend": ["HTTP & REST","Backend Programming","API Development","SQL & Data Modeling","Authentication & Authorization","Caching & Redis","Backend Testing","Queues & Async Jobs","Docker & Deployment","Backend API Project"],
+            "Full Stack": ["HTML","CSS","JavaScript","React","Backend APIs","SQL & Databases","Authentication","Full-Stack Testing","Docker & Deployment","Full-Stack Capstone"],
+            "Android": ["Kotlin","Android Fundamentals","Jetpack Compose","Android Architecture","Room & Local Storage","Retrofit & REST APIs","Android Testing","App Performance","Play Store Release","Android Portfolio App"],
+            "DevOps": ["Linux & Bash","Git & Collaboration","Docker","CI/CD","Cloud Fundamentals","Terraform","Kubernetes","Observability","DevSecOps","Production Deployment"],
+            "DevSecOps": ["Linux & Networking","Secure Git Workflow","Container Security","Secure CI/CD","Cloud Security","Infrastructure Security","Kubernetes Security","Security Monitoring","Software Supply Chain","Secure Delivery Project"],
+            "Data Analyst": ["Excel & Data Cleaning","SQL","Statistics","Python for Analysis","Data Visualization","Power BI / Tableau","Business Analytics","Data Storytelling","KPI Design","Analytics Portfolio"],
+            "AI Engineer": ["Python for AI","Math for AI","Machine Learning","Deep Learning","LLM Fundamentals","RAG Systems","AI Agents","Model Serving","AI Evaluation & Safety","AI Product Project"],
+            "AI and Data Scientist": ["Python & Pandas","Probability & Statistics","SQL","Machine Learning","Feature Engineering","Deep Learning","NLP & Generative AI","Experimentation","Model Deployment","Data Science Capstone"],
+            "Data Engineer": ["Python for Data Engineering","Advanced SQL","Data Modeling","ETL & ELT","Apache Spark","Data Warehouses","Kafka & Streaming","Airflow Orchestration","Data Quality & Governance","Data Platform Project"],
+            "Machine Learning": ["Python & NumPy","Math for ML","Classical Machine Learning","Model Evaluation","Feature Engineering","Deep Learning","NLP & Transformers","MLOps","Model Monitoring","ML Production Project"],
+            "PostgreSQL": ["SQL Foundations","PostgreSQL Data Modeling","Indexes","EXPLAIN & Query Planning","Transactions & MVCC","Administration","Replication","Partitioning","Database Security","PostgreSQL Production Project"],
+            "iOS": ["Swift","SwiftUI","iOS Architecture","SwiftData Persistence","URLSession & Networking","XCTest","Performance & Instruments","App Security","App Store Delivery","iOS Portfolio App"],
+            "Blockchain": ["Cryptography Basics","Blockchain Fundamentals","Ethereum & EVM","Solidity","Smart Contract Security","Contract Testing","Web3 Frontend","Blockchain Backend","Deployment & Monitoring","DApp Project"],
+            "QA": ["Testing Fundamentals","Test Case Design","API Testing","Database Testing","UI Automation","Automation Frameworks","Performance Testing","Security Testing","CI/CD Testing","QA Automation Project"],
+            "Software Architect": ["Architecture Principles","SOLID & Design Patterns","API Architecture","Data Architecture","Distributed Systems","Scalability & Caching","Secure Architecture","Cloud Architecture","Reliability & SLOs","Architecture Case Study"],
+            "API Design": ["HTTP Deep Dive","REST API Design","OpenAPI & Schemas","Errors & Idempotency","OAuth2 & API Security","GraphQL","gRPC","Contract Testing","API Gateways","Production API Project"],
+            "Cyber Security": ["Networking Fundamentals","Linux Security","Web Security","Applied Cryptography","Security Testing","Secure Coding","Cloud Security","SIEM & Detection","Incident Response","Security Assessment Project"],
+            "UX Design": ["User Research","Personas & User Journeys","Information Architecture","Wireframing","UI Foundations","Prototyping","Usability Testing","Design Systems","Developer Handoff","UX Case Study"],
+            "Technical Writer": ["Technical Writing Fundamentals","Documentation Architecture","API Documentation","Docs as Code","Technical Diagrams","Developer Tutorials","SME Research","Content Quality & Accessibility","Documentation Portfolio"],
+            "Game Developer": ["Game Programming","Game Engine Fundamentals","Game Math","Game Physics","Game AI","Rendering & Shaders","Game Audio","Multiplayer Fundamentals","Game Optimization","Playable Game Project"],
+            "Server Side Game Developer": ["Game Networking","Game Backend Services","Authoritative Game State","Game Data Storage","Realtime Messaging","Matchmaking","Caching","Game Server Scaling","Backend Observability","Online Game Backend"],
+            "MLOps": ["Python & ML Tooling","ML Lifecycle","Git & CI","Containers for ML","Experiment Tracking","Model Registry","Model Serving","ML Pipelines","Model Monitoring","MLOps Platform Project"],
+            "Product Manager": ["Product Discovery","Product Strategy","PRDs & Requirements","Prioritization","Product Analytics","UX Collaboration","Technical Fluency","Product Experiments","Launch & GTM","Product Case Study"],
+            "Engineering Manager": ["Engineering Leadership","Planning & Execution","Technical Decision-Making","Hiring & Coaching","Engineering Quality","Engineering Metrics","Incident Leadership","Stakeholder Management","Engineering Strategy","Team Improvement Plan"],
+            "Developer Relations": ["Developer Community","Technical Content","Technical Speaking","Developer Advocacy","Developer Experience","Events & Workshops","Community Analytics","Developer Communication","DevRel Strategy","DevRel Portfolio"],
+            "BI Analyst": ["SQL","BI Data Modeling","Data Preparation","Power BI / Tableau","DAX & Calculations","Data Visualization","KPI Design","BI Governance","Executive Storytelling","BI Dashboard Portfolio"],
+            "AI Red Teaming": ["LLM Fundamentals","AI Threat Modeling","Prompt Injection Testing","RAG & Context Attacks","Agent Tool Security","Adversarial Evaluation","Privacy & Data Leakage","Jailbreak Testing","AI Safety Mitigations","AI Red-Team Report"],
+        }
+
+        topics = role_topics.get(role, [
+            f"{role} Fundamentals", f"{role} Tools & Workflow", f"Core {role} Concepts",
+            f"Advanced {role}", f"{role} Best Practices", f"{role} Testing & Quality",
+            f"{role} Automation", f"{role} Real-World Case Studies",
+            f"{role} Portfolio Project", f"{role} Interview Preparation"
+        ])
+
+        descriptions = {
+            "Frontend": "Build user-facing web interfaces with semantic HTML, responsive CSS, JavaScript and component frameworks.",
+            "Backend": "Build reliable server-side APIs, data layers, authentication and scalable services.",
+            "Full Stack": "Connect frontend interfaces, backend APIs, databases, authentication and deployment.",
+            "Android": "Build modern Android applications with Kotlin, Compose, architecture, networking and release workflows.",
+            "DevOps": "Automate infrastructure, CI/CD, containers, cloud deployment, reliability and operations.",
+            "DevSecOps": "Integrate security controls throughout source code, CI/CD, infrastructure and runtime operations.",
+            "Data Analyst": "Turn business data into reliable analysis, dashboards, KPIs and actionable recommendations.",
+            "AI Engineer": "Build production AI applications using ML, LLMs, retrieval, agents, evaluation and serving.",
+            "AI and Data Scientist": "Use statistics, machine learning and experimentation to solve data-driven problems.",
+            "Data Engineer": "Design dependable batch and streaming pipelines, warehouses, orchestration and data quality systems.",
+            "Machine Learning": "Develop, evaluate, deploy and monitor machine-learning models from data to production.",
+            "PostgreSQL": "Design, optimize and operate PostgreSQL databases with strong performance, concurrency and security.",
+            "iOS": "Build and ship native iOS applications with Swift, SwiftUI, persistence, networking and testing.",
+            "Blockchain": "Build secure blockchain applications and smart contracts with a focus on correctness and testing.",
+            "QA": "Build a complete quality strategy covering manual testing, APIs, automation, performance and CI.",
+            "Software Architect": "Design maintainable, scalable and secure systems using explicit architectural trade-offs.",
+            "API Design": "Design consistent, secure, documented and resilient APIs for clients and distributed services.",
+            "Cyber Security": "Develop practical defensive and application-security skills from networking through incident response.",
+            "UX Design": "Research users, design usable interfaces, validate them and communicate decisions through case studies.",
+            "Technical Writer": "Create clear, accurate developer documentation, tutorials, references and docs-as-code workflows.",
+            "Game Developer": "Build games across programming, engine systems, gameplay, graphics, networking and optimization.",
+            "Server Side Game Developer": "Build realtime game backends for sessions, state, matchmaking, persistence and scale.",
+            "MLOps": "Operate the ML lifecycle with reproducibility, pipelines, serving, monitoring and governance.",
+            "Product Manager": "Discover user problems, prioritize opportunities, work with engineering/design and measure outcomes.",
+            "Engineering Manager": "Lead engineering teams through planning, people development, technical decisions and reliable delivery.",
+            "Developer Relations": "Help developers succeed through technical content, community programs, events and product feedback.",
+            "BI Analyst": "Model business data and create governed dashboards, measures and executive-ready insights.",
+            "AI Red Teaming": "Systematically test AI systems for prompt injection, data leakage, unsafe tools and other adversarial failures.",
+        }
+        summary = descriptions.get(role, f"Build practical {role} skills through fundamentals, advanced concepts, projects and interview preparation.")
+
+        nodes = []
+        for i, topic in enumerate(topics, 1):
+            category = "Foundations" if i <= 2 else ("Core" if i <= 5 else ("Advanced" if i <= 7 else ("Projects" if i >= 9 else "Career")))
+            difficulty = "Beginner" if i <= 2 else ("Intermediate" if i <= 7 else "Advanced")
+            previous_id = f"{role.lower().replace(' ', '-')}-{i-1}" if i > 1 else None
+            nodes.append(RoadmapNodeSchema(
+                id=f"{role.lower().replace(' ', '-')}-{i}",
+                title=topic,
+                description=f"Learn and practice {topic.lower()} specifically for {role}.",
+                category=category,
+                difficulty=difficulty,
+                estimated_hours=5 if i <= 2 else (7 if i <= 6 else 9),
+                prerequisites=[previous_id] if previous_id else [],
+                skills=[topic],
+                projects=[f"{topic} hands-on project"] if i in (6, 9, 10) else [],
+                resources=["Official documentation", "Hands-on exercises", "Practice project"]
+            ))
+
+        return RoleRoadmapResponse(
+            role=role,
+            audience=f"Learners preparing for {role} roles at {req.experience_level or 'Beginner'} level",
+            estimated_months=max(3, min(12, round(len(nodes) * 0.55))),
+            summary=summary,
+            tracks=list(dict.fromkeys(n.category for n in nodes)),
+            nodes=nodes
+        )
+

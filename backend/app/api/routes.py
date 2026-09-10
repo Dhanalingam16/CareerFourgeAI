@@ -10,13 +10,13 @@ from app.schemas.schemas import (
     InterviewReportResponse, InterviewWhatIfRequest, InterviewWhatIfResponse,
     CodingSubmitRequest, CodingEvaluationResponse, SQLSubmitRequest, SQLEvaluationResponse,
     ReadinessBreakdownSchema, PersonalizedRoadmapResponse, ReassessmentResponse,
-    RecruiterDashboardResponse
+    RecruiterDashboardResponse, RoleRoadmapRequest, RoleRoadmapResponse, AITutorRequest, AITutorResponse
 )
 from app.ai.services import (
     JobRequirementAnalyzer, ResumeParser, SkillTruthEngine,
     WeaknessDiscoveryEngine, JobGapAnalyzer, AdaptiveInterviewEngine,
     CodingEvaluator, SQLEvaluator, JobReadinessCalculator,
-    ImprovementPlanner, RecruiterService
+    ImprovementPlanner, RecruiterService, CareerRoadmapAgent
 )
 
 router = APIRouter()
@@ -131,9 +131,17 @@ def submit_sql(payload: SQLSubmitRequest):
 def get_readiness_score(profile_id: int):
     return JobReadinessCalculator().calculate_readiness()
 
-@router.post("/roadmap/generate", response_model=PersonalizedRoadmapResponse)
-def generate_roadmap():
+@router.post("/roadmap/generate", response_model=RoleRoadmapResponse)
+def generate_role_roadmap(payload: RoleRoadmapRequest):
+    return CareerRoadmapAgent().generate_role_roadmap(payload)
+
+@router.post("/roadmap/legacy", response_model=PersonalizedRoadmapResponse)
+def generate_legacy_roadmap():
     return ImprovementPlanner().generate_plan()
+
+@router.post("/ai/tutor", response_model=AITutorResponse)
+def ai_tutor(payload: AITutorRequest):
+    return CareerRoadmapAgent().tutor(payload)
 
 @router.post("/reassessment/start", response_model=ReassessmentResponse)
 def run_reassessment():

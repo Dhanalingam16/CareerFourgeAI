@@ -157,6 +157,34 @@ export interface PersonalizedRoadmap {
   seven_day_plan: RoadmapTask[];
 }
 
+
+export interface RoadmapNode {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  difficulty: string;
+  estimated_hours: number;
+  prerequisites: string[];
+  skills: string[];
+  projects: string[];
+  resources: string[];
+}
+
+export interface RoleRoadmap {
+  role: string;
+  audience: string;
+  estimated_months: number;
+  summary: string;
+  tracks: string[];
+  nodes: RoadmapNode[];
+}
+
+export interface AITutorResponse {
+  reply: string;
+  suggested_actions: string[];
+}
+
 export interface ReassessmentResult {
   previous_readiness_score: number;
   new_readiness_score: number;
