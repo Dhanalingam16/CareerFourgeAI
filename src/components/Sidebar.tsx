@@ -70,11 +70,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onNavigate }) => {
           </span>
           
           <button
-            onClick={() => onNavigate('coding')}
+            onClick={() => onNavigate('aptitude')}
             className={getNavClass('aptitude')}
           >
             <div className="flex items-center space-x-2.5">
-              <Sliders className="w-4 h-4 text-[#64748B]" />
+              <Sliders className={`w-4 h-4 ${currentTab === 'aptitude' ? 'text-[#0284C7]' : 'text-[#64748B]'}`} />
               <span>Aptitude</span>
             </div>
           </button>

@@ -17,6 +17,7 @@ import { JobGapSimulator } from './pages/JobGapSimulator';
 import { AdaptiveInterview } from './pages/AdaptiveInterview';
 import { ProjectDeepDive } from './pages/ProjectDeepDive';
 import { CodingWorkspace } from './pages/CodingWorkspace';
+import { AptitudeWorkspace } from './pages/AptitudeWorkspace';
 import { SQLWorkspace } from './pages/SQLWorkspace';
 import { JobReadinessDashboard } from './pages/JobReadinessDashboard';
 import { PersonalizedRoadmapPage } from './pages/PersonalizedRoadmap';
@@ -40,7 +41,7 @@ export function App() {
     // Protected routes check
     const protectedTabs = [
       'dashboard', 'baseline', 'assessment-player', 'job', 'resume', 
-      'truth', 'gap', 'interview', 'project', 'coding', 'sql', 
+      'truth', 'gap', 'interview', 'project', 'coding', 'aptitude', 'sql', 
       'readiness', 'roadmap', 'reassessment'
     ];
 
@@ -220,6 +221,10 @@ export function App() {
 
           {currentTab === 'project' && (
             <ProjectDeepDive onProceedToCoding={() => handleNavigate('coding')} />
+          )}
+
+          {currentTab === 'aptitude' && (
+            <AptitudeWorkspace onNavigateToCoding={() => handleNavigate('coding')} />
           )}
 
           {currentTab === 'coding' && (

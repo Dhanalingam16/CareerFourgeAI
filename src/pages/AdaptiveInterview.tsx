@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   ArrowLeft, Sparkles, Mic, MicOff, Video, VideoOff, MoreHorizontal,
   Maximize2, Paperclip, Send, Clock, CheckCircle2, ChevronDown, ChevronUp,
-  AlertCircle, Play, ShieldCheck, User, RefreshCw, BarChart2, X
+  AlertCircle, Play, ShieldCheck, User, RefreshCw, BarChart2, X, MessageSquare
 } from 'lucide-react';
 import { api } from '../services/api';
 import { useUserStore } from '../hooks/useUserStore';
@@ -69,6 +69,7 @@ export const AdaptiveInterview: React.FC<AdaptiveInterviewProps> = ({
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const recognitionRef = useRef<any>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
 
   // Timer Countdown Effect
   useEffect(() => {
@@ -111,7 +112,13 @@ export const AdaptiveInterview: React.FC<AdaptiveInterviewProps> = ({
     };
   }, [viewMode, isCameraOn]);
 
-  // Format seconds to mm:ss
+  // Auto-scroll chat
+  useEffect(() => {
+    if (chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [chatHistory]);
+
   const formatTime = (secs: number) => {
     const m = Math.floor(secs / 60);
     const s = secs % 60;
@@ -281,10 +288,10 @@ export const AdaptiveInterview: React.FC<AdaptiveInterviewProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] font-sans text-[#0A192F]">
+    <div className="w-full min-h-screen bg-[#F8FAFC] font-sans text-[#0A192F] flex flex-col">
 
       {/* TOP BAR / NAVIGATION HEADER */}
-      <div className="px-8 py-4 bg-white border-b border-[#E2E8F0] flex items-center justify-between">
+      <div className="w-full px-6 lg:px-8 py-4 bg-white border-b border-[#E2E8F0] flex items-center justify-between shadow-sm">
         <div>
           <button
             onClick={() => onNavigate && onNavigate('dashboard')}
@@ -312,7 +319,7 @@ export const AdaptiveInterview: React.FC<AdaptiveInterviewProps> = ({
           </div>
         </div>
 
-        {/* TOP RIGHT TIME REMAINING CARD & PROFILE */}
+        {/* TOP RIGHT TIME REMAINING CARD */}
         <div className="flex items-center space-x-4">
           <div className="bg-white border border-[#E2E8F0] rounded-xl px-4 py-2 flex items-center space-x-3 shadow-sm">
             <div className="p-2 rounded-lg bg-slate-100 text-[#0A192F]">
@@ -326,11 +333,11 @@ export const AdaptiveInterview: React.FC<AdaptiveInterviewProps> = ({
         </div>
       </div>
 
-      {/* MAIN CONTAINER */}
-      <div className="p-8 max-w-7xl mx-auto">
+      {/* FULL-WIDTH MAIN CONTAINER */}
+      <div className="w-full flex-1 p-6 lg:p-8 space-y-6">
 
         {/* SUB TAB NAV (SETUP, HISTORY, TRUTH MATRIX, SIMULATOR) */}
-        <div className="flex justify-end items-center mb-6">
+        <div className="flex justify-end items-center">
           <div className="flex items-center space-x-2 bg-white border border-[#E2E8F0] p-1 rounded-xl text-xs font-semibold shadow-sm">
             <button
               onClick={() => { setActiveTabNav('interview'); if (viewMode !== 'interview') setViewMode('setup'); }}
@@ -473,17 +480,17 @@ export const AdaptiveInterview: React.FC<AdaptiveInterviewProps> = ({
         )}
 
         {/* ========================================================================= */}
-        {/* VIEW 2: MOCKUP-PERFECT LIVE INTERVIEW VIEW */}
+        {/* VIEW 2: MOCKUP-PERFECT FULL SCREEN INTERVIEW LAYOUT (MATCHING MOCKUP) */}
         {/* ========================================================================= */}
         {viewMode === 'interview' && currentQuestion && !loadingText && (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start w-full">
 
-            {/* LEFT COLUMN: VIDEO CALL & CONVERSATION STREAM (8 COLS) */}
+            {/* LEFT MAIN COLUMN: VIDEO FRAME (TOP), CHAT STREAM (MIDDLE), ANSWER INPUT (BOTTOM) - 8 COLS */}
             <div className="lg:col-span-8 space-y-6">
 
-              {/* 1. LARGE CENTRAL VIDEO PANEL */}
+              {/* 1. LARGE CENTRAL VIDEO CALL PANEL */}
               <div className={`relative rounded-2xl overflow-hidden bg-slate-900 border border-slate-200 shadow-md transition-all ${
-                isFullscreen ? 'fixed inset-4 z-50 rounded-2xl' : 'h-[420px]'
+                isFullscreen ? 'fixed inset-4 z-50 rounded-2xl' : 'h-[440px]'
               }`}>
                 {/* AI HR Video Background Image */}
                 <img
@@ -492,7 +499,6 @@ export const AdaptiveInterview: React.FC<AdaptiveInterviewProps> = ({
                   className="w-full h-full object-cover filter brightness-95"
                 />
 
-                {/* Optional WebCam overlay element for candidate if active */}
                 {isCameraOn && (
                   <video
                     ref={videoRef}
@@ -598,6 +604,7 @@ export const AdaptiveInterview: React.FC<AdaptiveInterviewProps> = ({
                     )}
                   </div>
                 ))}
+                <div ref={chatEndRef} />
               </div>
 
               {/* 3. ANSWER INPUT BOX CONTAINER */}
@@ -653,7 +660,7 @@ export const AdaptiveInterview: React.FC<AdaptiveInterviewProps> = ({
 
             </div>
 
-            {/* RIGHT COLUMN: 5 SIDEBAR CARDS (4 COLS) */}
+            {/* RIGHT SIDEBAR COLUMN: 5 CARDS (4 COLS) */}
             <div className="lg:col-span-4 space-y-6">
 
               {/* CARD 1: INTERVIEW PROGRESS */}
@@ -900,44 +907,6 @@ export const AdaptiveInterview: React.FC<AdaptiveInterviewProps> = ({
                 <span className="text-[10px] font-mono text-[#64748B] uppercase">Confidence</span>
                 <div className="text-3xl font-black text-purple-600">{reportData.scores?.confidence || 88}%</div>
                 <span className="text-[11px] text-[#64748B] block">Verified Evidence</span>
-              </div>
-            </div>
-
-            {/* STRENGTHS & WEAKNESSES */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
-              <div className="p-6 bg-emerald-50/50 border border-emerald-200/80 rounded-xl space-y-3">
-                <h3 className="text-sm font-bold text-emerald-800 flex items-center">
-                  <CheckCircle2 className="w-4 h-4 mr-2 text-emerald-600" /> Demonstrated Strengths
-                </h3>
-                <ul className="space-y-2 text-xs text-emerald-900 font-medium">
-                  {(reportData.strengths || [
-                    "Clear structural response using standard STAR methodology.",
-                    "Solid understanding of core software development lifecycle.",
-                    "Concise explanation of problem-solving approach under technical constraints."
-                  ]).map((st: string, i: number) => (
-                    <li key={i} className="flex items-start">
-                      <span className="text-emerald-600 mr-2">•</span>
-                      <span>{st}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <div className="p-6 bg-amber-50/50 border border-amber-200/80 rounded-xl space-y-3">
-                <h3 className="text-sm font-bold text-amber-800 flex items-center">
-                  <AlertCircle className="w-4 h-4 mr-2 text-amber-600" /> Areas for Improvement
-                </h3>
-                <ul className="space-y-2 text-xs text-amber-900 font-medium">
-                  {(reportData.weaknesses || [
-                    "Elaborate more on specific quantitative metrics and performance gains.",
-                    "Provide deeper architectural rationale when selecting backend databases."
-                  ]).map((wk: string, i: number) => (
-                    <li key={i} className="flex items-start">
-                      <span className="text-amber-600 mr-2">•</span>
-                      <span>{wk}</span>
-                    </li>
-                  ))}
-                </ul>
               </div>
             </div>
           </div>
