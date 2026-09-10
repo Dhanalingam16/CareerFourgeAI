@@ -236,41 +236,320 @@ class ImpactLearningPriorityEngine:
         ]
 
 class AdaptiveInterviewEngine:
-    def evaluate_answer(self, question_id: int, user_answer: str) -> AnswerEvaluationResponse:
-        answer_lower = user_answer.lower()
-        discovered_weakness = None
-        feedback = "Solid explanation with clear technical terminology."
+    def __init__(self, provider: Optional[BaseAIProvider] = None):
+        self.provider = provider or get_ai_provider()
 
-        if "rotated" in answer_lower or "binary search" in answer_lower:
-            if "pivot" not in answer_lower or "mod" not in answer_lower:
-                discovered_weakness = "Complexity Analysis & Edge Cases in Rotated Arrays"
-                feedback = "Good fundamental explanation of binary search, but struggled with determining the pivot index boundary condition in rotated arrays."
+    def start_interview(
+        self,
+        target_role: str = "Software Engineer",
+        interview_type: str = "Technical",
+        difficulty: str = "Intermediate",
+        num_questions: int = 10,
+        job_description: Optional[str] = None,
+        target_company: Optional[str] = None,
+        focus_skills: Optional[List[str]] = None
+    ) -> QuestionResponse:
+        # Role & Type Question Strategy
+        type_questions = {
+            "Technical": [
+                ("Python", "Explain the difference between a list and a tuple in Python. When would you use each?"),
+                ("OOP", "How does polymorphism differ from inheritance, and how would you apply it when designing an payment interface?"),
+                ("APIs", "What is the role of idempotency in RESTful APIs, and which HTTP methods must be idempotent?")
+            ],
+            "Coding": [
+                ("DSA", "Explain how you would find the pivot element in a rotated sorted array in O(log N) time."),
+                ("Algorithms", "How do you detect a cycle in a linked list using Floyd's Tortoise and Hare algorithm?"),
+                ("Complexity", "What is the worst-case space complexity of recursive quicksort?")
+            ],
+            "Behavioral / HR": [
+                ("Communication", "Tell me about a time when you had a disagreement with a team member on a technical decision. How did you resolve it?"),
+                ("Failure", "Describe a project failure or mistake you made. What did you learn and how did you adapt?"),
+                ("Leadership", "How do you handle scope creep or changing requirements under a tight deadline?")
+            ],
+            "System Design": [
+                ("Scalability", "How do you prevent a single relational database instance from becoming a read bottleneck under heavy traffic?"),
+                ("Caching", "Explain the difference between write-through and write-back caching strategies."),
+                ("Load Balancing", "How does consistent hashing prevent massive cache invalidations when adding new cache nodes?")
+            ],
+            "SQL": [
+                ("Queries", "Explain the difference between INNER JOIN, LEFT JOIN, and FULL OUTER JOIN with a realistic example."),
+                ("Optimization", "What is write amplification penalty when adding multiple non-clustered indexes to an active table?"),
+                ("Window Functions", "How does RANK() OVER (PARTITION BY category ORDER BY score DESC) work in SQL?")
+            ],
+            "Mixed": [
+                ("Python", "Explain how Python's GIL affects multithreading vs multiprocessing for CPU-bound tasks."),
+                ("DSA", "How do hash collisions occur in dictionaries, and how does Python resolve them?"),
+                ("System Design", "What trade-offs exist between ACID compliance in relational DBs vs eventual consistency in NoSQL?")
+            ]
+        }
 
-        elif "concurrency" in answer_lower or "voting" in answer_lower:
-            if "lock" not in answer_lower and "transaction" not in answer_lower and "redis" not in answer_lower:
-                discovered_weakness = "Database Concurrency Control & Race Conditions"
-                feedback = "Understands HTTP request flows, but missed explicit isolation levels or atomic locks for concurrent votes."
+        qs = type_questions.get(interview_type, type_questions["Technical"])
+        first_q = qs[0]
 
-        next_q = QuestionResponse(
-            question_id=question_id + 1,
-            sequence_num=min(question_id - 1000 + 1, 15),
-            total_budget=15,
-            category="System Design" if discovered_weakness else "DSA",
-            target_skill="System Design" if discovered_weakness else "DSA",
-            question_text="How would you design a rate limiter to prevent API abuse during peak voting windows?" if discovered_weakness else "Can you analyze the worst-case space complexity of recursive binary search?",
-            difficulty="Hard"
+        # Use JD context if available
+        if job_description and ("python" in job_description.lower() or "dsa" in job_description.lower()):
+            first_q = ("Job-Specific", f"Based on your target JD, how would you optimize data pipelines in {target_role} applications?")
+
+        return QuestionResponse(
+            question_id=2001,
+            interview_id=101,
+            sequence_num=1,
+            total_budget=num_questions,
+            category=interview_type,
+            target_skill=first_q[0],
+            question_text=first_q[1],
+            difficulty=difficulty,
+            question_type="initial"
         )
+
+    def evaluate_answer(
+        self,
+        interview_id: int,
+        question_id: int,
+        user_answer: str,
+        current_seq: int = 1,
+        total_budget: int = 10,
+        interview_type: str = "Technical"
+    ) -> AnswerEvaluationResponse:
+        answer_lower = user_answer.lower()
+        
+        # Multidimensional Scoring Evaluation
+        tech_acc = 7.5
+        concept_und = 7.0
+        prob_solv = 6.8
+        comp = 6.5
+        comm = 8.0
+        clarity = 8.2
+        reasoning = 7.0
+        examples = 6.0
+        
+        strengths = ["Clear communication structure"]
+        weaknesses = []
+        discovered_weakness = None
+
+        if len(user_answer) < 20:
+            tech_acc = 4.0
+            concept_und = 4.5
+            comp = 3.0
+            weaknesses.append("Very brief explanation lacking technical depth")
+            discovered_weakness = "Superficial Explanation & Missing Trade-offs"
+        elif "list" in answer_lower or "tuple" in answer_lower or "python" in answer_lower:
+            if "mutable" in answer_lower or "immutable" in answer_lower:
+                tech_acc = 8.5
+                concept_und = 8.5
+                strengths.append("Correctly identified mutability difference between lists and tuples")
+            else:
+                weaknesses.append("Did not explicitly highlight immutability vs mutability")
+                discovered_weakness = "Core Mutability Concept"
+
+        score = round((tech_acc * 0.25 + concept_und * 0.25 + prob_solv * 0.2 + comm * 0.15 + comp * 0.15), 1)
+
+        eval_schema = AnswerEvaluationSchema(
+            technical_accuracy=tech_acc,
+            concept_understanding=concept_und,
+            problem_solving=prob_solv,
+            completeness=comp,
+            communication=comm,
+            clarity=clarity,
+            reasoning=reasoning,
+            examples=examples,
+            overall_score=score,
+            answer_confidence=0.84 if score > 7.0 else 0.62,
+            strengths=strengths,
+            weaknesses=weaknesses,
+            skills_detected=["Python", "Technical Reasoning"],
+            feedback=f"Good effort. Your answer scored {score}/10. " + ("" if not weaknesses else f"Key gap: {weaknesses[0]}."),
+            follow_up_required=True if discovered_weakness else False,
+            next_question_type="adaptive_foundational" if discovered_weakness else "adaptive_deeper"
+        )
+
+        is_completed = current_seq >= total_budget
+
+        next_q = None
+        if not is_completed:
+            if discovered_weakness:
+                next_text = f"Can you explain how memory allocation differs for mutable lists vs immutable tuples in Python?"
+                q_type = "adaptive_foundational"
+            else:
+                next_text = f"How would you utilize tuple immutability as dictionary keys or in multi-threaded environments?"
+                q_type = "adaptive_deeper"
+
+            next_q = QuestionResponse(
+                question_id=question_id + 1,
+                interview_id=interview_id,
+                sequence_num=current_seq + 1,
+                total_budget=total_budget,
+                category=interview_type,
+                target_skill="Python",
+                question_text=next_text,
+                difficulty="Intermediate",
+                question_type=q_type
+            )
 
         return AnswerEvaluationResponse(
+            interview_id=interview_id,
             question_id=question_id,
-            clarity_score=0.85,
-            relevance_score=0.88,
-            technical_depth_score=0.72 if discovered_weakness else 0.90,
-            discovered_weakness=discovered_weakness,
-            feedback=feedback,
-            is_followup_needed=True if discovered_weakness else False,
+            evaluation=eval_schema,
+            is_completed=is_completed,
             next_question=next_q
         )
+
+    def finalize_report(self, interview_id: int = 101) -> InterviewReportResponse:
+        evidences = [
+            InterviewEvidenceItem(
+                skill_name="Python",
+                claimed_level="Advanced",
+                verified_level="Advanced",
+                confidence=0.88,
+                evidence_bullets=[
+                    "Demonstrated pythonic mutability understanding on Q1",
+                    "Clear explanation of async I/O handlers"
+                ],
+                weaknesses=[],
+                question_references=[1, 3]
+            ),
+            InterviewEvidenceItem(
+                skill_name="DSA",
+                claimed_level="Advanced",
+                verified_level="Intermediate",
+                confidence=0.82,
+                evidence_bullets=[
+                    "Understands standard binary search linear bounds",
+                    "Struggled with rotated array pivot boundary conditions"
+                ],
+                weaknesses=["Binary Search Variations", "Complexity Analysis"],
+                question_references=[2, 4]
+            ),
+            InterviewEvidenceItem(
+                skill_name="System Design",
+                claimed_level="Intermediate",
+                verified_level="Weak",
+                confidence=0.75,
+                evidence_bullets=[
+                    "Good awareness of REST API endpoints",
+                    "Limited depth on distributed database sharding and caching"
+                ],
+                weaknesses=["Distributed Caching", "Database Sharding"],
+                question_references=[5]
+            )
+        ]
+
+        recs = [
+            InterviewRecommendationItem(
+                id=1,
+                title="Practice DSA Complexity",
+                category="DSA",
+                reason="Your recent interview answers show difficulty explaining time and space complexity for recursive algorithms.",
+                action_type="practice_dsa"
+            ),
+            InterviewRecommendationItem(
+                id=2,
+                title="Practice System Design Caching",
+                category="System Design",
+                reason="System design is a high priority gap for your target Software Engineer role.",
+                action_type="practice_sys_design"
+            ),
+            InterviewRecommendationItem(
+                id=3,
+                title="Practice SQL Window Functions",
+                category="SQL",
+                reason="Solid query basics demonstrated, but window functions need practice.",
+                action_type="practice_sql"
+            ),
+            InterviewRecommendationItem(
+                id=4,
+                title="Retake Technical Interview",
+                category="Interview",
+                reason="Re-assess after completing recommended practice items to boost your Interview Readiness.",
+                action_type="retake_interview"
+            )
+        ]
+
+        return InterviewReportResponse(
+            interview_id=interview_id,
+            target_role="Software Engineer",
+            interview_type="Technical",
+            difficulty="Intermediate",
+            overall_score=74.0,
+            technical_knowledge=78.0,
+            problem_solving=71.0,
+            communication=82.0,
+            answer_quality=76.0,
+            strong_areas=["Python Fundamentals", "Communication", "OOP Principles"],
+            areas_to_improve=["DSA Complexity Analysis", "System Design Sharding", "SQL JOIN Optimizations"],
+            key_observations="You understand Python and OOP principles well. Your explanation of algorithmic complexity was incomplete on recursive calls.",
+            why_did_i_get_this_score=evidences,
+            recommendations=recs
+        )
+
+    def get_history(self) -> List[Dict[str, Any]]:
+        return [
+            {
+                "id": 101,
+                "date": "Sep 10, 2026",
+                "target_role": "Software Engineer",
+                "interview_type": "Technical Interview",
+                "difficulty": "Intermediate",
+                "overall_score": 74.0,
+                "skills_evaluated": ["Python", "DSA", "System Design"],
+                "weaknesses": ["DSA Complexity Analysis", "Database Sharding"],
+                "recommendations": ["Practice DSA Complexity", "Practice System Design Caching"]
+            },
+            {
+                "id": 98,
+                "date": "Sep 07, 2026",
+                "target_role": "Backend Developer",
+                "interview_type": "Mixed Interview",
+                "difficulty": "Intermediate",
+                "overall_score": 68.0,
+                "skills_evaluated": ["SQL", "FastAPI", "OOP"],
+                "weaknesses": ["SQL JOIN Optimization"],
+                "recommendations": ["Practice SQL Window Functions"]
+            }
+        ]
+
+    def get_readiness() -> Dict[str, Any]:
+        return {
+            "readiness_score": 68.0,
+            "breakdown": {
+                "technical_knowledge": 74.0,
+                "dsa": 61.0,
+                "coding": 72.0,
+                "communication": 84.0,
+                "sql": 66.0
+            },
+            "biggest_gap": "DSA",
+            "reason": "The target role requires strong problem solving, while recent interview evidence shows weakness in algorithm complexity and optimization."
+        }
+
+    def get_what_changed(self) -> Dict[str, Any]:
+        return {
+            "previous_readiness": 64.0,
+            "current_readiness": 71.0,
+            "changes": [
+                {"change": "+4% DSA improvement", "delta": 4.0},
+                {"change": "+2% Technical Interview", "delta": 2.0},
+                {"change": "+1% SQL improvement", "delta": 1.0}
+            ]
+        }
+
+    def simulate_what_if(self, skill_name: str, level_increase: int = 1) -> Dict[str, Any]:
+        current = 68.0
+        delta_map = {
+            "DSA": 5.0 * level_increase,
+            "SQL": 2.0 * level_increase,
+            "System Design": 4.0 * level_increase,
+            "Communication": 1.0 * level_increase
+        }
+        delta = delta_map.get(skill_name, 3.0 * level_increase)
+        simulated = min(round(current + delta, 1), 100.0)
+
+        return {
+            "current_readiness": current,
+            "simulated_readiness": simulated,
+            "delta": delta,
+            "explanation": f"Improving {skill_name} by {level_increase} level increases your estimated Job Readiness from {current}% to {simulated}% (+{delta}%)."
+        }
 
 class CodingEvaluator:
     def evaluate(self, code: str) -> CodingEvaluationResponse:

@@ -6,8 +6,9 @@ from app.schemas.schemas import (
     LoginRequest, RegisterRequest, AuthResponse,
     JobAnalysisRequest, JobAnalysisResponse, ResumeAnalysisResponse,
     SkillTruthResponse, JobGapSimulatorResponse, QuestionResponse,
-    AnswerRequest, AnswerEvaluationResponse, CodingSubmitRequest,
-    CodingEvaluationResponse, SQLSubmitRequest, SQLEvaluationResponse,
+    AnswerRequest, AnswerEvaluationResponse, InterviewSetupRequest,
+    InterviewReportResponse, InterviewWhatIfRequest, InterviewWhatIfResponse,
+    CodingSubmitRequest, CodingEvaluationResponse, SQLSubmitRequest, SQLEvaluationResponse,
     ReadinessBreakdownSchema, PersonalizedRoadmapResponse, ReassessmentResponse,
     RecruiterDashboardResponse
 )
@@ -75,13 +76,48 @@ def get_skill_truth():
 def simulate_job_gap():
     return JobGapAnalyzer().analyze_gaps()
 
+# --- Interview Prep Module Endpoints ---
 @router.post("/interview/start", response_model=QuestionResponse)
-def start_interview():
-    return WeaknessDiscoveryEngine().select_next_question(1, [])
+def start_interview(payload: Optional[InterviewSetupRequest] = None):
+    req = payload or InterviewSetupRequest()
+    return AdaptiveInterviewEngine().start_interview(
+        target_role=req.target_role or "Software Engineer",
+        interview_type=req.interview_type,
+        difficulty=req.difficulty,
+        num_questions=req.num_questions,
+        job_description=req.job_description,
+        target_company=req.target_company,
+        focus_skills=req.focus_skills
+    )
 
 @router.post("/interview/answer", response_model=AnswerEvaluationResponse)
 def submit_answer(payload: AnswerRequest):
-    return AdaptiveInterviewEngine().evaluate_answer(payload.question_id, payload.user_answer)
+    return AdaptiveInterviewEngine().evaluate_answer(
+        interview_id=payload.interview_id,
+        question_id=payload.question_id,
+        user_answer=payload.user_answer
+    )
+
+@router.post("/interview/{interview_id}/submit", response_model=InterviewReportResponse)
+@router.get("/interview/{interview_id}/report", response_model=InterviewReportResponse)
+def get_interview_report(interview_id: int):
+    return AdaptiveInterviewEngine().finalize_report(interview_id)
+
+@router.get("/interview/history")
+def get_interview_history():
+    return AdaptiveInterviewEngine().get_history()
+
+@router.get("/interview/readiness")
+def get_interview_readiness():
+    return AdaptiveInterviewEngine().get_readiness()
+
+@router.get("/interview/what-changed")
+def get_what_changed():
+    return AdaptiveInterviewEngine().get_what_changed()
+
+@router.post("/interview/what-if", response_model=InterviewWhatIfResponse)
+def simulate_what_if(payload: InterviewWhatIfRequest):
+    return AdaptiveInterviewEngine().simulate_what_if(payload.skill_name, payload.level_increase)
 
 @router.post("/coding/submit", response_model=CodingEvaluationResponse)
 def submit_code(payload: CodingSubmitRequest):

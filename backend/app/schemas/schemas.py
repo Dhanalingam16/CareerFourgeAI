@@ -86,29 +86,128 @@ class JobGapSimulatorResponse(BaseModel):
     high_priority_gaps: List[SkillGapItem]
     summary_message: str
 
-# --- Adaptive Interview Schemas ---
+# --- Interview Module Schemas ---
+class InterviewSetupRequest(BaseModel):
+    target_role: Optional[str] = "Software Engineer"
+    interview_type: str = "Technical" # Technical, Coding, Behavioral / HR, System Design, SQL, Mixed
+    difficulty: str = "Intermediate" # Beginner, Intermediate, Advanced
+    num_questions: int = 10 # 5, 10, 15
+    job_description: Optional[str] = None
+    target_company: Optional[str] = None
+    focus_skills: Optional[List[str]] = None
+
 class QuestionResponse(BaseModel):
     question_id: int
+    interview_id: int
     sequence_num: int
-    total_budget: int = 15
-    category: str # HR, Behavioral, Technical, DSA, Project, System Design, Coding, SQL
+    total_budget: int = 10
+    category: str # Technical, Coding, Behavioral, System Design, SQL, Mixed
     target_skill: str
     question_text: str
     difficulty: str
+    question_type: str = "initial"
 
 class AnswerRequest(BaseModel):
+    interview_id: int
     question_id: int
     user_answer: str
 
-class AnswerEvaluationResponse(BaseModel):
-    question_id: int
-    clarity_score: float
-    relevance_score: float
-    technical_depth_score: float
-    discovered_weakness: Optional[str]
+class AnswerEvaluationSchema(BaseModel):
+    technical_accuracy: float = 8.0 # 1-10
+    concept_understanding: float = 7.0 # 1-10
+    problem_solving: float = 7.0 # 1-10
+    completeness: float = 7.0 # 1-10
+    communication: float = 8.0 # 1-10
+    clarity: float = 8.0 # 1-10
+    reasoning: float = 7.0 # 1-10
+    examples: float = 6.0 # 1-10
+    overall_score: float = 7.4 # 0-10
+    answer_confidence: float = 0.84 # 0.0-1.0
+    strengths: List[str] = []
+    weaknesses: List[str] = []
+    skills_detected: List[str] = []
     feedback: str
-    is_followup_needed: bool
-    next_question: Optional[QuestionResponse]
+    follow_up_required: bool = False
+    next_question_type: str = "deeper_concept"
+
+class AnswerEvaluationResponse(BaseModel):
+    interview_id: int
+    question_id: int
+    evaluation: AnswerEvaluationSchema
+    is_completed: bool = False
+    next_question: Optional[QuestionResponse] = None
+
+class InterviewEvidenceItem(BaseModel):
+    skill_name: str
+    claimed_level: str
+    verified_level: str
+    confidence: float
+    evidence_bullets: List[str]
+    weaknesses: List[str]
+    question_references: List[int]
+
+class InterviewRecommendationItem(BaseModel):
+    id: Optional[int] = None
+    title: str
+    category: str
+    reason: str
+    action_type: str # practice_dsa, practice_sql, practice_sys_design, retake_interview
+
+class InterviewReportResponse(BaseModel):
+    interview_id: int
+    target_role: str
+    interview_type: str
+    difficulty: str
+    overall_score: float # 74%
+    technical_knowledge: float # 78%
+    problem_solving: float # 71%
+    communication: float # 82%
+    answer_quality: float # 76%
+    strong_areas: List[str]
+    areas_to_improve: List[str]
+    key_observations: str
+    why_did_i_get_this_score: List[InterviewEvidenceItem]
+    recommendations: List[InterviewRecommendationItem]
+
+class InterviewHistoryItem(BaseModel):
+    id: int
+    date: str
+    target_role: str
+    interview_type: str
+    difficulty: str
+    overall_score: float
+    skills_evaluated: List[str]
+    weaknesses: List[str]
+    recommendations: List[str]
+
+class InterviewReadinessBreakdown(BaseModel):
+    readiness_score: float # 68%
+    technical_knowledge: float # 74%
+    dsa: float # 61%
+    coding: float # 72%
+    communication: float # 84%
+    sql: float # 66%
+    biggest_gap: str # DSA
+    reason: str
+
+class InterviewWhatChangedItem(BaseModel):
+    change: str # "+4% DSA improvement"
+    delta: float # 4.0
+
+class InterviewWhatChangedResponse(BaseModel):
+    previous_readiness: float
+    current_readiness: float
+    changes: List[InterviewWhatChangedItem]
+
+class InterviewWhatIfRequest(BaseModel):
+    skill_name: str # DSA, SQL, System Design, Communication
+    level_increase: int = 1 # 1 level
+
+class InterviewWhatIfResponse(BaseModel):
+    current_readiness: float
+    simulated_readiness: float
+    delta: float
+    explanation: str
 
 # --- Coding & SQL Schemas ---
 class CodingSubmitRequest(BaseModel):

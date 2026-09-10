@@ -130,6 +130,52 @@ class MockAIProvider(BaseAIProvider):
                 "summary_message": "Immediate attention required on System Design and DSA to meet target job readiness thresholds."
             }
 
+        if "evaluate_answer" in prompt_lower or "evaluate interview answer" in prompt_lower:
+            return {
+                "technical_accuracy": 7.5,
+                "concept_understanding": 7.0,
+                "problem_solving": 6.8,
+                "completeness": 6.5,
+                "communication": 8.0,
+                "clarity": 8.2,
+                "reasoning": 7.0,
+                "examples": 6.0,
+                "overall_score": 7.3,
+                "answer_confidence": 0.82,
+                "strengths": ["Clear communication style", "Accurate high-level explanation"],
+                "weaknesses": ["Incomplete algorithmic complexity analysis", "Missing edge case consideration"],
+                "skills_detected": ["Python", "DSA"],
+                "feedback": "Good fundamental understanding, but your response would be stronger by addressing complexity trade-offs and edge cases explicitly.",
+                "follow_up_required": True,
+                "next_question_type": "adaptive_foundational"
+            }
+
+        if "interview question" in prompt_lower or "generate_question" in prompt_lower:
+            return {
+                "category": "DSA",
+                "target_skill": "Binary Search",
+                "question_text": "Can you explain how you would find the pivot element in a rotated sorted array in logarithmic O(log N) time?",
+                "difficulty": "Intermediate",
+                "question_type": "adaptive_foundational"
+            }
+
+        if "interview report" in prompt_lower or "finalize_report" in prompt_lower:
+            return {
+                "overall_score": 74.0,
+                "technical_knowledge": 78.0,
+                "problem_solving": 71.0,
+                "communication": 82.0,
+                "answer_quality": 76.0,
+                "strong_areas": ["Python Fundamentals", "Communication", "Object-Oriented Programming"],
+                "areas_to_improve": ["DSA Complexity Analysis", "System Design Sharding", "SQL JOIN Optimizations"],
+                "key_observations": "You understand Python and OOP principles well. Your explanation of algorithmic complexity was incomplete on recursive calls.",
+                "evidence_breakdown": {
+                    "Python": "Strong evidence across Q1 & Q3",
+                    "DSA": "Intermediate evidence on Q2 & Q5 with weakness in Big-O bounds",
+                    "System Design": "Weak evidence on database partitioning"
+                }
+            }
+
         # Default generic JSON structure
         return {"status": "success", "message": "Processed successfully by AI Engine"}
 

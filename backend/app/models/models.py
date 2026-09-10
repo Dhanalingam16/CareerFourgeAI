@@ -112,9 +112,16 @@ class Interview(Base):
     id = Column(Integer, primary_key=True, index=True)
     profile_id = Column(Integer, ForeignKey("candidate_profiles.id"))
     job_id = Column(Integer, ForeignKey("jobs.id"), nullable=True)
-    max_questions = Column(Integer, default=15)
+    target_role = Column(String, default="Software Engineer")
+    interview_type = Column(String, default="Technical") # Technical, Coding, Behavioral / HR, System Design, SQL, Mixed
+    difficulty = Column(String, default="Intermediate") # Beginner, Intermediate, Advanced
+    max_questions = Column(Integer, default=10) # 5, 10, 15
     questions_asked = Column(Integer, default=0)
-    status = Column(String, default="in_progress") # in_progress, completed
+    job_description = Column(Text, nullable=True)
+    target_company = Column(String, nullable=True)
+    focus_skills = Column(JSON, default=list) # ["Python", "DSA", "SQL"]
+    status = Column(String, default="in_progress") # configured, in_progress, completed
+    overall_score = Column(Float, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     profile = relationship("CandidateProfile", back_populates="interviews")
@@ -126,10 +133,11 @@ class Question(Base):
     id = Column(Integer, primary_key=True, index=True)
     interview_id = Column(Integer, ForeignKey("interviews.id"))
     sequence_num = Column(Integer, nullable=False)
-    category = Column(String, default="Technical") # HR, Behavioral, Technical, DSA, Project, System Design, Coding, SQL
+    category = Column(String, default="Technical") # Technical, Coding, Behavioral, System Design, SQL, Mixed
     target_skill = Column(String, nullable=False)
     question_text = Column(Text, nullable=False)
-    difficulty = Column(String, default="Medium")
+    difficulty = Column(String, default="Intermediate")
+    question_type = Column(String, default="initial") # initial, adaptive_foundational, adaptive_deeper
     info_value_score = Column(Float, default=0.85)
 
     interview = relationship("Interview", back_populates="questions")
@@ -142,13 +150,71 @@ class Answer(Base):
     question_id = Column(Integer, ForeignKey("questions.id"))
     user_answer = Column(Text, nullable=False)
     evaluated = Column(Boolean, default=False)
-    clarity_score = Column(Float, default=0.8)
-    relevance_score = Column(Float, default=0.8)
-    technical_depth_score = Column(Float, default=0.8)
-    discovered_weakness = Column(String, nullable=True)
+    
+    # Multidimensional Answer Evaluation
+    technical_accuracy = Column(Float, default=7.0) # 1-10
+    concept_understanding = Column(Float, default=7.0) # 1-10
+    problem_solving = Column(Float, default=7.0) # 1-10
+    completeness = Column(Float, default=7.0) # 1-10
+    communication = Column(Float, default=8.0) # 1-10
+    clarity = Column(Float, default=8.0) # 1-10
+    reasoning = Column(Float, default=7.0) # 1-10
+    examples = Column(Float, default=6.0) # 1-10
+    answer_confidence = Column(Float, default=0.8) # 0.0 to 1.0 (evidence-based)
+    overall_score = Column(Float, default=7.2) # 0 to 10
+    
+    strengths = Column(JSON, default=list)
+    weaknesses = Column(JSON, default=list)
+    skills_detected = Column(JSON, default=list)
     feedback = Column(Text)
+    follow_up_required = Column(Boolean, default=False)
+    next_question_type = Column(String, default="deeper_concept") # foundational, deeper_concept
 
     question = relationship("Question", back_populates="answer")
+
+class InterviewSkillEvidence(Base):
+    __tablename__ = "interview_skill_evidences"
+
+    id = Column(Integer, primary_key=True, index=True)
+    interview_id = Column(Integer, ForeignKey("interviews.id"))
+    profile_id = Column(Integer, ForeignKey("candidate_profiles.id"))
+    skill_name = Column(String, nullable=False)
+    claimed_level = Column(String, nullable=False) # Advanced, Intermediate, Beginner
+    verified_level = Column(String, nullable=False) # Intermediate, Advanced, Weak
+    confidence = Column(Float, default=0.84) # 84%
+    evidence_bullets = Column(JSON, default=list)
+    weaknesses = Column(JSON, default=list)
+    question_references = Column(JSON, default=list) # [2, 4, 7, 9]
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class InterviewReport(Base):
+    __tablename__ = "interview_reports"
+
+    id = Column(Integer, primary_key=True, index=True)
+    interview_id = Column(Integer, ForeignKey("interviews.id"))
+    overall_score = Column(Float, default=74.0)
+    technical_knowledge = Column(Float, default=78.0)
+    problem_solving = Column(Float, default=71.0)
+    communication = Column(Float, default=82.0)
+    answer_quality = Column(Float, default=76.0)
+    strong_areas = Column(JSON, default=list)
+    areas_to_improve = Column(JSON, default=list)
+    key_observations = Column(Text)
+    evidence_breakdown = Column(JSON, default=dict) # Why did I get this score breakdown
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class InterviewRecommendation(Base):
+    __tablename__ = "interview_recommendations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    interview_id = Column(Integer, ForeignKey("interviews.id"))
+    profile_id = Column(Integer, ForeignKey("candidate_profiles.id"))
+    title = Column(String, nullable=False) # Practice DSA Complexity
+    category = Column(String, nullable=False) # DSA, SQL, System Design, Technical
+    reason = Column(Text, nullable=False)
+    action_type = Column(String, nullable=False) # practice_dsa, practice_sql, practice_sys_design, retake_interview
+    is_completed = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 class CodingSubmission(Base):
     __tablename__ = "coding_submissions"

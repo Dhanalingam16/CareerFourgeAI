@@ -93,12 +93,14 @@ export interface Question {
 
 export interface AnswerEvaluation {
   question_id: number;
-  clarity_score: number;
-  relevance_score: number;
-  technical_depth_score: number;
-  discovered_weakness: string | null;
-  feedback: string;
-  is_followup_needed: boolean;
+  clarity_score?: number;
+  relevance_score?: number;
+  technical_depth_score?: number;
+  discovered_weakness?: string | null;
+  feedback?: string;
+  is_followup_needed?: boolean;
+  is_completed?: boolean;
+  evaluation?: any;
   next_question?: Question;
 }
 

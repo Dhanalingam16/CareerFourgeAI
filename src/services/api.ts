@@ -155,40 +155,169 @@ export const api = {
     });
   },
 
-  // Interview Engine
-  startInterview: async (): Promise<Question> => {
-    return fetchJSON<Question>('/interview/start', { method: 'POST' }, {
-      question_id: 1001,
+  // Interview Engine (Configured & Adaptive)
+  startConfiguredInterview: async (config: {
+    target_role?: string;
+    interview_type: string;
+    difficulty: string;
+    num_questions: number;
+    job_description?: string;
+    target_company?: string;
+    focus_skills?: string[];
+  }): Promise<Question> => {
+    return fetchJSON<Question>('/interview/start', {
+      method: 'POST',
+      body: JSON.stringify(config)
+    }, {
+      question_id: 2001,
       sequence_num: 1,
-      total_budget: 15,
-      category: "DSA",
-      target_skill: "DSA",
-      question_text: "Explain binary search. What is its time complexity and how would you modify standard binary search to find a target in a rotated sorted array?",
-      difficulty: "Hard"
+      total_budget: config.num_questions || 10,
+      category: config.interview_type || "Technical",
+      target_skill: "Python",
+      question_text: config.interview_type === "Coding"
+        ? "Explain how you would find the pivot element in a rotated sorted array in logarithmic O(log N) time."
+        : config.interview_type === "Behavioral / HR"
+        ? "Tell me about a time when you had a disagreement with a team member on a technical decision. How did you resolve it?"
+        : config.interview_type === "System Design"
+        ? "How do you prevent a single relational database instance from becoming a read bottleneck under heavy traffic?"
+        : config.interview_type === "SQL"
+        ? "Explain the difference between INNER JOIN, LEFT JOIN, and FULL OUTER JOIN with a realistic example."
+        : "Explain the difference between a list and a tuple in Python. When would you use each?",
+      difficulty: config.difficulty || "Intermediate"
     });
   },
 
-  submitAnswer: async (questionId: number, answerText: string): Promise<AnswerEvaluation> => {
+  startInterview: async (): Promise<Question> => {
+    return api.startConfiguredInterview({ interview_type: "Technical", difficulty: "Intermediate", num_questions: 10 });
+  },
+
+  submitAnswer: async (questionId: number, answerText: string, interviewId: number = 101): Promise<AnswerEvaluation> => {
     return fetchJSON<AnswerEvaluation>('/interview/answer', {
       method: 'POST',
-      body: JSON.stringify({ question_id: questionId, user_answer: answerText }),
+      body: JSON.stringify({ interview_id: interviewId, question_id: questionId, user_answer: answerText }),
     }, {
       question_id: questionId,
       clarity_score: 0.85,
       relevance_score: 0.88,
       technical_depth_score: 0.72,
       discovered_weakness: "Complexity Analysis & Edge Cases in Rotated Arrays",
-      feedback: "Good fundamental explanation of binary search, but struggled with determining the pivot index boundary condition in rotated arrays.",
+      feedback: "Good fundamental explanation, but missed addressing memory immutability and complexity trade-offs.",
       is_followup_needed: true,
       next_question: {
         question_id: questionId + 1,
         sequence_num: 2,
-        total_budget: 15,
-        category: "DSA",
-        target_skill: "DSA",
-        question_text: "Can you specifically write the condition to decide whether to search the left or right half when `nums[mid] >= nums[low]`?",
-        difficulty: "Hard"
+        total_budget: 10,
+        category: "Technical",
+        target_skill: "Python",
+        question_text: "Can you explain how memory allocation differs for mutable lists vs immutable tuples in Python?",
+        difficulty: "Intermediate"
       }
+    });
+  },
+
+  getInterviewReport: async (interviewId: number = 101) => {
+    return fetchJSON(`/interview/${interviewId}/report`, { method: 'GET' }, {
+      interview_id: interviewId,
+      target_role: "Software Engineer",
+      interview_type: "Technical Interview",
+      difficulty: "Intermediate",
+      overall_score: 74.0,
+      technical_knowledge: 78.0,
+      problem_solving: 71.0,
+      communication: 82.0,
+      answer_quality: 76.0,
+      strong_areas: ["Python Fundamentals", "Communication", "OOP Principles"],
+      areas_to_improve: ["DSA Complexity Analysis", "System Design Sharding", "SQL JOIN Optimizations"],
+      key_observations: "You understand Python and OOP principles well. Your explanation of algorithmic complexity was incomplete on recursive calls.",
+      why_did_i_get_this_score: [
+        {
+          skill_name: "Python",
+          claimed_level: "Advanced",
+          verified_level: "Advanced",
+          confidence: 0.88,
+          evidence_bullets: ["Demonstrated pythonic mutability understanding on Q1", "Clear explanation of async I/O handlers"],
+          weaknesses: [],
+          question_references: [1, 3]
+        },
+        {
+          skill_name: "DSA",
+          claimed_level: "Advanced",
+          verified_level: "Intermediate",
+          confidence: 0.82,
+          evidence_bullets: ["Understands standard binary search linear bounds", "Struggled with rotated array pivot boundary conditions"],
+          weaknesses: ["Binary Search Variations", "Complexity Analysis"],
+          question_references: [2, 4]
+        },
+        {
+          skill_name: "System Design",
+          claimed_level: "Intermediate",
+          verified_level: "Weak",
+          confidence: 0.75,
+          evidence_bullets: ["Good awareness of REST API endpoints", "Limited depth on distributed database sharding and caching"],
+          weaknesses: ["Distributed Caching", "Database Sharding"],
+          question_references: [5]
+        }
+      ],
+      recommendations: [
+        { id: 1, title: "Practice DSA Complexity", category: "DSA", reason: "Your recent interview answers show difficulty explaining time and space complexity.", action_type: "practice_dsa" },
+        { id: 2, title: "Practice System Design Caching", category: "System Design", reason: "System design is a high priority gap for your target Software Engineer role.", action_type: "practice_sys_design" },
+        { id: 3, title: "Practice SQL Window Functions", category: "SQL", reason: "Solid query basics demonstrated, but window functions need practice.", action_type: "practice_sql" },
+        { id: 4, title: "Retake Technical Interview", category: "Interview", reason: "Re-assess after completing recommended practice items.", action_type: "retake_interview" }
+      ]
+    });
+  },
+
+  getInterviewHistory: async () => {
+    return fetchJSON('/interview/history', { method: 'GET' }, [
+      {
+        id: 101,
+        date: "Sep 10, 2026",
+        target_role: "Software Engineer",
+        interview_type: "Technical Interview",
+        difficulty: "Intermediate",
+        overall_score: 74.0,
+        skills_evaluated: ["Python", "DSA", "System Design"],
+        weaknesses: ["DSA Complexity Analysis", "Database Sharding"],
+        recommendations: ["Practice DSA Complexity", "Practice System Design Caching"]
+      },
+      {
+        id: 98,
+        date: "Sep 07, 2026",
+        target_role: "Backend Developer",
+        interview_type: "Mixed Interview",
+        difficulty: "Intermediate",
+        overall_score: 68.0,
+        skills_evaluated: ["SQL", "FastAPI", "OOP"],
+        weaknesses: ["SQL JOIN Optimization"],
+        recommendations: ["Practice SQL Window Functions"]
+      }
+    ]);
+  },
+
+  getInterviewReadiness: async () => {
+    return fetchJSON('/interview/readiness', { method: 'GET' }, {
+      readiness_score: 68.0,
+      breakdown: {
+        technical_knowledge: 74.0,
+        dsa: 61.0,
+        coding: 72.0,
+        communication: 84.0,
+        sql: 66.0
+      },
+      biggest_gap: "DSA",
+      reason: "The target role requires strong problem solving, while recent interview evidence shows weakness in algorithm complexity and optimization."
+    });
+  },
+
+  simulateWhatIf: async (skillName: string, levelIncrease: number = 1) => {
+    return fetchJSON('/interview/what-if', {
+      method: 'POST',
+      body: JSON.stringify({ skill_name: skillName, level_increase: levelIncrease })
+    }, {
+      current_readiness: 68.0,
+      simulated_readiness: 73.0,
+      delta: 5.0,
+      explanation: `Improving ${skillName} by ${levelIncrease} level increases your estimated Job Readiness from 68% to 73% (+5%).`
     });
   },
 

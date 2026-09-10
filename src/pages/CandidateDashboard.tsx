@@ -1,5 +1,8 @@
 import React from 'react';
-import { ArrowRight, CheckCircle2, AlertCircle, ShieldCheck, Target, Award, Sparkles, TrendingUp, Clock } from 'lucide-react';
+import {
+  Pencil, FileText, Code2, Server, Mic, Brain, Sparkles, Zap, BarChart3,
+  ChevronRight, ArrowRight, AlertTriangle, CheckCircle2, Target
+} from 'lucide-react';
 import { useUserStore } from '../hooks/useUserStore';
 
 interface CandidateDashboardProps {
@@ -9,192 +12,392 @@ interface CandidateDashboardProps {
 export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onNavigate }) => {
   const store = useUserStore();
 
-  const readiness = store.readinessScore;
-  const prevReadiness = store.previousReadinessScore;
-  const scoreDiff = readiness - prevReadiness;
+  const readiness = store.readinessScore || 69;
+  const prevReadiness = store.previousReadinessScore || 68;
+  const scoreDiff = Math.max(readiness - prevReadiness, 1);
+  const firstName = store.profile.fullName ? store.profile.fullName.split(' ')[0] : 'Alex';
 
-  const firstName = store.profile.fullName ? store.profile.fullName.split(' ')[0] : 'Candidate';
+  // SVG Circular Gauge calculation for 69%
+  const radius = 38;
+  const circumference = 2 * Math.PI * radius;
+  const strokeDashoffset = circumference - (readiness / 100) * circumference;
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8 font-sans text-[#0A192F]">
+    <div className="p-8 max-w-[1300px] mx-auto space-y-7 font-sans text-[#0F172A]">
       
-      {/* GREETING & ROLE HEADER */}
+      {/* HEADER ROW */}
       <div className="space-y-1">
-        <div className="flex items-center space-x-2">
-          <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-mono text-[10px] font-bold uppercase">
-            Profile Active
-          </span>
-          <span className="text-xs text-[#64748B] font-mono">
-            {store.goal.experienceLevel} Experience Target
-          </span>
-        </div>
-        <h1 className="text-2xl font-extrabold text-[#0A192F]">
+        <h1 className="text-3xl font-extrabold tracking-tight text-[#0F172A]">
           Good morning, {firstName}.
         </h1>
-        <p className="text-xs text-[#64748B] font-medium">
-          Target role: <span className="font-bold text-[#0A192F]">{store.goal.targetRole}</span>
-          {store.goal.targetCompany && store.goal.targetCompany !== 'No specific company' && (
-            <span> at <strong className="text-[#0A192F]">{store.goal.targetCompany}</strong></span>
-          )}
-        </p>
+        <div className="flex items-center space-x-2 text-xs font-semibold text-[#64748B]">
+          <span>Target role:</span>
+          <span className="font-bold text-[#0F172A]">{store.goal.targetRole || 'Software Engineer'}</span>
+          <button className="text-[#64748B] hover:text-[#0F172A]">
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
 
-      {/* CARD 1: YOUR JOB READINESS */}
-      <div className="bg-white rounded-lg border border-[#E2E8F0] p-6 shadow-sm space-y-6">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-[#E2E8F0] pb-4">
-          <div>
-            <span className="text-[10px] font-mono text-[#64748B] uppercase block">YOUR JOB READINESS</span>
-            <div className="flex items-baseline space-x-3 mt-1">
-              <span className="text-5xl font-black text-[#0A192F]">{readiness}%</span>
-              <span className={`text-xs font-semibold px-2.5 py-0.5 rounded border ${
-                readiness >= 75
-                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                  : 'bg-amber-50 text-amber-800 border-amber-200'
-              }`}>
-                {readiness >= 75 ? 'Strong alignment' : 'Good progress'}
+      {/* ROW 1: JOB READINESS & 4 METRIC CARDS */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+        
+        {/* JOB READINESS CARD (5 COLS) */}
+        <div className="lg:col-span-5 bg-white rounded-xl border border-[#E2E8F0] p-5 shadow-sm flex items-center justify-between">
+          <div className="space-y-3">
+            <span className="text-[10px] font-mono font-bold text-[#94A3B8] uppercase tracking-wider block">
+              JOB READINESS
+            </span>
+
+            <div className="flex items-center space-x-4">
+              {/* Circular Gauge */}
+              <div className="relative w-24 h-24 flex items-center justify-center shrink-0">
+                <svg className="w-full h-full transform -rotate-90">
+                  <circle
+                    cx="48"
+                    cy="48"
+                    r={radius}
+                    stroke="#E2E8F0"
+                    strokeWidth="8"
+                    fill="transparent"
+                  />
+                  <circle
+                    cx="48"
+                    cy="48"
+                    r={radius}
+                    stroke="#F59E0B"
+                    strokeWidth="8"
+                    strokeDasharray={circumference}
+                    strokeDashoffset={strokeDashoffset}
+                    strokeLinecap="round"
+                    fill="transparent"
+                  />
+                </svg>
+                <span className="absolute text-2xl font-black text-[#0F172A] font-sans">
+                  {readiness}%
+                </span>
+              </div>
+
+              <div className="space-y-2">
+                <span className="inline-block px-3 py-1 rounded-full text-xs font-bold bg-[#FEF08A] text-[#854D0E]">
+                  Good progress
+                </span>
+                <div className="flex items-center space-x-1.5 text-xs text-[#64748B] font-medium">
+                  <span>Target:</span>
+                  <span className="font-bold text-[#0F172A]">{store.goal.targetRole || 'Software Engineer'}</span>
+                  <Pencil className="w-3 h-3 text-[#64748B] cursor-pointer" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 4 METRIC CARDS (7 COLS) */}
+        <div className="lg:col-span-7 grid grid-cols-2 sm:grid-cols-4 gap-4">
+          
+          {/* ATS MATCH */}
+          <div className="bg-white rounded-xl border border-[#E2E8F0] p-4 shadow-sm flex flex-col justify-between space-y-3">
+            <div className="flex items-center space-x-2 text-[#64748B]">
+              <FileText className="w-4 h-4 text-[#0284C7]" />
+              <span className="text-[10px] font-mono font-bold uppercase tracking-wider">ATS MATCH</span>
+            </div>
+            <span className="text-2xl font-extrabold text-[#0F172A]">
+              {store.atsResult.atsScore}%
+            </span>
+          </div>
+
+          {/* DSA VERIFIED */}
+          <div className="bg-white rounded-xl border border-[#E2E8F0] p-4 shadow-sm flex flex-col justify-between space-y-3">
+            <div className="flex items-center space-x-2 text-[#64748B]">
+              <Code2 className="w-4 h-4 text-[#0284C7]" />
+              <span className="text-[10px] font-mono font-bold uppercase tracking-wider">DSA VERIFIED</span>
+            </div>
+            <span className="text-2xl font-extrabold text-[#0F172A]">
+              {store.categoryScores.dsa}%
+            </span>
+          </div>
+
+          {/* SYSTEM DESIGN */}
+          <div className="bg-white rounded-xl border border-[#E2E8F0] p-4 shadow-sm flex flex-col justify-between space-y-3">
+            <div className="flex items-center space-x-2 text-[#64748B]">
+              <Server className="w-4 h-4 text-[#0284C7]" />
+              <span className="text-[10px] font-mono font-bold uppercase tracking-wider">SYSTEM DESIGN</span>
+            </div>
+            <span className="text-2xl font-extrabold text-[#0F172A]">
+              {store.categoryScores.systemDesign}%
+            </span>
+          </div>
+
+          {/* INTERVIEW */}
+          <div className="bg-white rounded-xl border border-[#E2E8F0] p-4 shadow-sm flex flex-col justify-between space-y-3">
+            <div className="flex items-center space-x-2 text-[#64748B]">
+              <Mic className="w-4 h-4 text-[#0284C7]" />
+              <span className="text-[10px] font-mono font-bold uppercase tracking-wider">INTERVIEW</span>
+            </div>
+            <span className="text-2xl font-extrabold text-[#0F172A]">
+              {store.categoryScores.interview}%
+            </span>
+          </div>
+
+        </div>
+
+      </div>
+
+      {/* ROW 2: TWO FEATURED MODULES (AI HR INTERVIEW & CAREER INTELLIGENCE) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        
+        {/* LEFT FEATURED: AI HR INTERVIEW */}
+        <div className="bg-white rounded-xl border border-[#E2E8F0] p-6 shadow-sm flex flex-col justify-between space-y-5">
+          <div className="space-y-2">
+            <div className="flex items-center space-x-2">
+              <Sparkles className="w-4 h-4 text-[#0284C7]" />
+              <span className="font-extrabold text-sm text-[#0F172A] tracking-tight">AI HR INTERVIEW</span>
+              <span className="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-[#FEF08A] text-[#854D0E]">
+                AI
+              </span>
+            </div>
+            <p className="text-xs text-[#64748B] leading-relaxed">
+              Practice realistic interviews with an AI HR interviewer that adapts to your answers.
+            </p>
+          </div>
+
+          {/* Inner Stats Box */}
+          <div className="bg-[#F8FAFC] p-4 rounded-lg border border-[#E2E8F0] flex justify-between items-center text-xs">
+            <div>
+              <span className="text-[10px] text-[#64748B] block font-mono">Last Interview</span>
+              <span className="text-lg font-extrabold text-[#0F172A] mt-0.5 block">71%</span>
+            </div>
+
+            <div className="border-l border-[#E2E8F0] pl-4">
+              <span className="text-[10px] text-[#64748B] block font-mono">Strong area</span>
+              <span className="inline-block mt-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[#DCFCE7] text-[#166534]">
+                Communication
+              </span>
+            </div>
+
+            <div className="border-l border-[#E2E8F0] pl-4">
+              <span className="text-[10px] text-[#64748B] block font-mono">Needs improvement</span>
+              <span className="inline-block mt-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[#FEE2E2] text-[#991B1B]">
+                Behavioral examples
               </span>
             </div>
           </div>
 
-          <button
-            onClick={() => onNavigate('roadmap')}
-            className="px-5 py-2.5 bg-[#0A192F] hover:bg-[#112240] text-white font-semibold text-xs rounded transition-colors flex items-center shadow-sm"
-          >
-            Improve readiness <ArrowRight className="w-3.5 h-3.5 ml-1.5 text-[#FFDE59]" />
-          </button>
-        </div>
+          {/* Action Buttons */}
+          <div className="flex items-center space-x-3 pt-1">
+            <button
+              onClick={() => onNavigate('interview')}
+              className="px-5 py-2.5 bg-[#0A192F] hover:bg-[#1E293B] text-white font-semibold text-xs rounded-lg transition-colors flex items-center shadow-sm"
+            >
+              Start AI Interview <ArrowRight className="w-3.5 h-3.5 ml-2 text-[#FEF08A]" />
+            </button>
 
-        {/* Supporting metrics row */}
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-xs font-mono">
-          <div className="p-3 bg-[#F8FAFC] rounded border border-[#E2E8F0]">
-            <span className="text-[#64748B] block text-[10px]">ATS RESUME MATCH</span>
-            <span className="font-bold text-[#0A192F] text-sm mt-0.5 block">{store.atsResult.atsScore}%</span>
-          </div>
-
-          <div className="p-3 bg-[#F8FAFC] rounded border border-[#E2E8F0]">
-            <span className="text-[#64748B] block text-[10px]">DSA VERIFIED</span>
-            <span className="font-bold text-[#0A192F] text-sm mt-0.5 block">{store.categoryScores.dsa}%</span>
-          </div>
-
-          <div className="p-3 bg-[#F8FAFC] rounded border border-[#E2E8F0]">
-            <span className="text-[#64748B] block text-[10px]">SYS DESIGN VERIFIED</span>
-            <span className="font-bold text-[#0A192F] text-sm mt-0.5 block">{store.categoryScores.systemDesign}%</span>
-          </div>
-
-          <div className="p-3 bg-[#F8FAFC] rounded border border-[#E2E8F0]">
-            <span className="text-[#64748B] block text-[10px]">INTERVIEW READINESS</span>
-            <span className="font-bold text-[#0A192F] text-sm mt-0.5 block">{store.categoryScores.interview}%</span>
+            <button
+              onClick={() => onNavigate('interview')}
+              className="px-5 py-2.5 bg-white border border-[#CBD5E1] hover:bg-[#F8FAFC] text-[#0F172A] font-semibold text-xs rounded-lg transition-colors"
+            >
+              View report
+            </button>
           </div>
         </div>
-      </div>
 
-      {/* CARD 2: NEXT BEST ACTION (REACTIVELY UPDATED) */}
-      <div className="bg-white rounded-lg border-2 border-[#427AB5] p-6 shadow-sm space-y-4 relative overflow-hidden">
-        <div className="flex justify-between items-center border-b border-[#E2E8F0] pb-2">
-          <span className="text-xs font-mono font-bold text-[#427AB5] uppercase tracking-wider flex items-center">
-            <Sparkles className="w-3.5 h-3.5 mr-1.5 text-[#FFDE59]" />
-            RECOMMENDED NEXT BEST ACTION
-          </span>
-          <span className="text-[10px] font-mono text-[#64748B] bg-slate-100 px-2 py-0.5 rounded flex items-center">
-            <Clock className="w-3 h-3 mr-1 text-[#64748B]" />
-            ~{store.nextBestAction.estimatedMinutes} mins
-          </span>
-        </div>
-
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        {/* RIGHT FEATURED: CAREER INTELLIGENCE */}
+        <div className="bg-white rounded-xl border border-[#E2E8F0] p-6 shadow-sm flex flex-col justify-between space-y-4">
           <div>
             <div className="flex items-center space-x-2">
-              <h3 className="text-base font-bold text-[#0A192F]">{store.nextBestAction.title}</h3>
-              <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200">
-                {store.nextBestAction.impact}
-              </span>
+              <Brain className="w-5 h-5 text-[#0284C7]" />
+              <span className="font-extrabold text-sm text-[#0F172A] tracking-tight">CAREER INTELLIGENCE</span>
             </div>
-            <p className="text-xs text-[#64748B] mt-1.5 leading-relaxed max-w-xl">
-              {store.nextBestAction.reason}
+            <p className="text-xs text-[#64748B] mt-1">
+              Evidence suggests a different proficiency level.
             </p>
           </div>
 
-          <button
-            onClick={() => onNavigate('interview', store.nextBestAction.targetAssessmentId)}
-            className="px-6 py-3 bg-[#0A192F] hover:bg-[#112240] text-white font-semibold text-xs rounded transition-colors flex items-center shadow-sm shrink-0"
-          >
-            Start assessment <ArrowRight className="w-3.5 h-3.5 ml-1.5 text-[#FFDE59]" />
-          </button>
+          {/* Verification Table */}
+          <div className="border border-[#E2E8F0] rounded-lg overflow-hidden text-xs">
+            <div className="bg-[#F8FAFC] px-4 py-2 flex justify-between text-[10px] font-mono text-[#64748B] font-bold border-b border-[#E2E8F0]">
+              <span className="w-24">SKILL</span>
+              <span className="w-32 text-center">SELF-ASSESSMENT</span>
+              <span className="w-36 text-right">VERIFIED EVIDENCE</span>
+            </div>
+
+            <div className="divide-y divide-[#E2E8F0] font-medium bg-white">
+              <div className="px-4 py-2.5 flex justify-between items-center">
+                <span className="font-bold text-[#0F172A] w-24">DSA</span>
+                <span className="text-[#64748B] w-32 text-center">Advanced →</span>
+                <div className="w-36 flex items-center justify-end space-x-1.5">
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#FEF08A] text-[#854D0E]">
+                    Intermediate
+                  </span>
+                  <AlertTriangle className="w-3.5 h-3.5 text-[#F59E0B]" />
+                </div>
+              </div>
+
+              <div className="px-4 py-2.5 flex justify-between items-center">
+                <span className="font-bold text-[#0F172A] w-24">Python</span>
+                <span className="text-[#64748B] w-32 text-center">Advanced →</span>
+                <div className="w-36 flex items-center justify-end space-x-1.5">
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#DCFCE7] text-[#166534]">
+                    Advanced
+                  </span>
+                  <CheckCircle2 className="w-3.5 h-3.5 text-[#16A34A]" />
+                </div>
+              </div>
+
+              <div className="px-4 py-2.5 flex justify-between items-center">
+                <span className="font-bold text-[#0F172A] w-24">SQL</span>
+                <span className="text-[#64748B] w-32 text-center">Advanced →</span>
+                <div className="w-36 flex items-center justify-end space-x-1.5">
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#FEE2E2] text-[#991B1B]">
+                    Intermediate
+                  </span>
+                  <AlertTriangle className="w-3.5 h-3.5 text-[#EF4444]" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end pt-1">
+            <button
+              onClick={() => onNavigate('truth')}
+              className="text-xs font-bold text-[#0284C7] hover:underline flex items-center"
+            >
+              View evidence <ArrowRight className="w-3.5 h-3.5 ml-1" />
+            </button>
+          </div>
         </div>
+
       </div>
 
-      {/* GRID: TOP SKILL GAPS, RESUME, RECENT PROGRESS */}
+      {/* ROW 3: THREE CARDS GRID (TOP SKILL GAPS, RECOMMENDED NEXT BEST ACTION, RECENT PROGRESS) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
-        {/* Top Skill Gaps */}
-        <div className="bg-white rounded-lg border border-[#E2E8F0] p-5 shadow-sm space-y-3">
-          <span className="text-xs font-mono font-bold text-[#64748B] uppercase block border-b border-[#E2E8F0] pb-2">
-            TOP SKILL GAPS
-          </span>
-          <ol className="space-y-2 text-xs font-medium">
-            {store.skillGaps.map((gap, idx) => (
-              <li key={gap.skill_name} className="flex justify-between items-center p-2 rounded bg-[#F8FAFC] border border-[#E2E8F0]">
-                <span className="text-[#0A192F] font-bold">{idx + 1}. {gap.skill_name}</span>
-                <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${
-                  gap.status === 'HIGH_PRIORITY_GAP'
-                    ? 'text-amber-800 bg-amber-100'
-                    : gap.status === 'NEEDS_IMPROVEMENT'
-                    ? 'text-blue-800 bg-blue-100'
-                    : 'text-emerald-800 bg-emerald-100'
-                }`}>
-                  {gap.status === 'HIGH_PRIORITY_GAP' ? 'High priority' : gap.status === 'NEEDS_IMPROVEMENT' ? 'Medium' : 'Verified'}
-                </span>
-              </li>
-            ))}
-          </ol>
-        </div>
-
-        {/* Resume ATS Score Card */}
-        <div className="bg-white rounded-lg border border-[#E2E8F0] p-5 shadow-sm flex flex-col justify-between space-y-3">
-          <div>
-            <span className="text-xs font-mono font-bold text-[#64748B] uppercase block border-b border-[#E2E8F0] pb-2">
-              RESUME ATS MATCH
-            </span>
-            <div className="mt-3">
-              <span className="text-xs text-[#64748B] block">Current Score:</span>
-              <span className="text-2xl font-extrabold text-[#0A192F]">{store.atsResult.atsScore}%</span>
+        {/* CARD 1: TOP SKILL GAPS */}
+        <div className="bg-white rounded-xl border border-[#E2E8F0] p-5 shadow-sm flex flex-col justify-between space-y-4">
+          <div className="space-y-3">
+            <div className="flex items-center space-x-2 text-[#0F172A]">
+              <Target className="w-4 h-4 text-[#0284C7]" />
+              <span className="font-extrabold text-xs tracking-wider uppercase font-mono text-[#64748B]">
+                TOP SKILL GAPS
+              </span>
             </div>
-            <p className="text-[11px] text-[#64748B] mt-1 line-clamp-2">
-              {store.atsResult.whatsWorking[0] || 'Resume matched with job criteria.'}
-            </p>
+
+            <div className="space-y-2 text-xs font-semibold">
+              <div 
+                onClick={() => onNavigate('gap')}
+                className="p-2.5 rounded-lg border border-[#E2E8F0] hover:border-[#0284C7] flex justify-between items-center cursor-pointer transition-colors"
+              >
+                <span>1. DSA</span>
+                <div className="flex items-center space-x-2">
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#FEE2E2] text-[#991B1B]">
+                    High
+                  </span>
+                  <ChevronRight className="w-3.5 h-3.5 text-[#94A3B8]" />
+                </div>
+              </div>
+
+              <div 
+                onClick={() => onNavigate('gap')}
+                className="p-2.5 rounded-lg border border-[#E2E8F0] hover:border-[#0284C7] flex justify-between items-center cursor-pointer transition-colors"
+              >
+                <span>2. System Design</span>
+                <div className="flex items-center space-x-2">
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#FEE2E2] text-[#991B1B]">
+                    High
+                  </span>
+                  <ChevronRight className="w-3.5 h-3.5 text-[#94A3B8]" />
+                </div>
+              </div>
+
+              <div 
+                onClick={() => onNavigate('gap')}
+                className="p-2.5 rounded-lg border border-[#E2E8F0] hover:border-[#0284C7] flex justify-between items-center cursor-pointer transition-colors"
+              >
+                <span>3. Behavioral Interview</span>
+                <div className="flex items-center space-x-2">
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#FEF08A] text-[#854D0E]">
+                    Medium
+                  </span>
+                  <ChevronRight className="w-3.5 h-3.5 text-[#94A3B8]" />
+                </div>
+              </div>
+            </div>
           </div>
+
           <button
-            onClick={() => onNavigate('resume')}
-            className="w-full py-2 bg-[#F8FAFC] hover:bg-slate-100 text-[#0A192F] font-semibold text-xs border border-[#E2E8F0] rounded transition-colors flex items-center justify-center"
+            onClick={() => onNavigate('gap')}
+            className="text-xs font-bold text-[#0284C7] hover:underline flex items-center text-left"
           >
-            View analysis <ArrowRight className="w-3 h-3 ml-1" />
+            View all gaps <ArrowRight className="w-3.5 h-3.5 ml-1" />
           </button>
         </div>
 
-        {/* Recent Progress */}
-        <div className="bg-white rounded-lg border border-[#E2E8F0] p-5 shadow-sm space-y-3">
-          <span className="text-xs font-mono font-bold text-[#64748B] uppercase block border-b border-[#E2E8F0] pb-2">
-            RECENT PROGRESS
-          </span>
-          <div className="pt-1 space-y-1">
-            <span className="text-[11px] text-[#64748B] block">Previous readiness: {prevReadiness}%</span>
-            <span className="text-sm font-bold text-[#0A192F] block">Current readiness: {readiness}%</span>
-            {scoreDiff > 0 ? (
-              <span className="text-xs font-bold text-emerald-700 font-mono inline-flex items-center px-2 py-0.5 rounded bg-emerald-50 border border-emerald-200 mt-1">
-                <TrendingUp className="w-3 h-3 mr-1" />
-                +{scoreDiff}% Readiness Growth
+        {/* CARD 2: RECOMMENDED NEXT BEST ACTION */}
+        <div className="bg-white rounded-xl border border-[#E2E8F0] p-5 shadow-sm flex flex-col justify-between space-y-4">
+          <div className="space-y-2">
+            <div className="flex items-center space-x-2 text-[#0F172A]">
+              <Zap className="w-4 h-4 text-[#0284C7]" />
+              <span className="font-extrabold text-xs tracking-wider uppercase font-mono text-[#64748B]">
+                RECOMMENDED NEXT BEST ACTION
               </span>
-            ) : (
-              <span className="text-xs font-semibold text-[#64748B] font-mono inline-block px-2 py-0.5 rounded bg-slate-100 mt-1">
-                Baseline Verified
-              </span>
-            )}
-          </div>
-          {store.assessmentAttempts.length > 0 && (
-            <div className="border-t border-[#E2E8F0] pt-2 text-[10px] font-mono text-[#64748B]">
-              Latest attempt: <strong className="text-[#0A192F]">{store.assessmentAttempts[store.assessmentAttempts.length - 1].title}</strong> ({store.assessmentAttempts[store.assessmentAttempts.length - 1].score}%)
             </div>
-          )}
+
+            <h3 className="font-extrabold text-sm text-[#0F172A]">
+              Complete Binary Search Assessment
+            </h3>
+
+            <div className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#FEF08A] text-[#854D0E]">
+              High impact • +4% readiness
+            </div>
+
+            <p className="text-xs text-[#64748B] leading-relaxed">
+              Your DSA assessment shows a gap in binary-search variations and complexity analysis.
+            </p>
+          </div>
+
+          <button
+            onClick={() => onNavigate('assessment-player', 'binary-search')}
+            className="w-full py-2.5 bg-[#0A192F] hover:bg-[#1E293B] text-white font-semibold text-xs rounded-lg transition-colors flex items-center justify-center shadow-sm"
+          >
+            Start assessment <ArrowRight className="w-3.5 h-3.5 ml-1.5 text-[#FEF08A]" />
+          </button>
+        </div>
+
+        {/* CARD 3: RECENT PROGRESS */}
+        <div className="bg-white rounded-xl border border-[#E2E8F0] p-5 shadow-sm flex flex-col justify-between space-y-4">
+          <div className="space-y-3">
+            <div className="flex items-center space-x-2 text-[#0F172A]">
+              <BarChart3 className="w-4 h-4 text-[#0284C7]" />
+              <span className="font-extrabold text-xs tracking-wider uppercase font-mono text-[#64748B]">
+                RECENT PROGRESS
+              </span>
+            </div>
+
+            <div className="flex justify-between items-baseline pt-1">
+              <div>
+                <span className="text-[10px] text-[#64748B] block font-mono">Previous readiness:</span>
+                <span className="text-lg font-bold text-[#0F172A]">{prevReadiness}%</span>
+              </div>
+              <div className="text-right">
+                <span className="text-lg font-extrabold text-[#0F172A]">{readiness}%</span>
+              </div>
+            </div>
+
+            <div className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#DCFCE7] text-[#166534]">
+              +{scoreDiff}% Readiness growth
+            </div>
+
+            <p className="text-[11px] text-[#64748B]">
+              Keep going! Every assessment helps you get closer to your goal.
+            </p>
+          </div>
+
+          <button
+            onClick={() => onNavigate('readiness')}
+            className="text-xs font-bold text-[#0284C7] hover:underline flex items-center text-left"
+          >
+            View detailed progress <ArrowRight className="w-3.5 h-3.5 ml-1" />
+          </button>
         </div>
 
       </div>

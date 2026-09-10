@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Navbar } from './components/Navbar';
+import { Sidebar } from './components/Sidebar';
 import { LandingPage } from './pages/LandingPage';
 import { LoginPage } from './pages/LoginPage';
 import { SignupPage } from './pages/SignupPage';
@@ -105,10 +106,65 @@ export function App() {
 
   const currentStore = userStore.getSnapshot();
 
+  // Full-bleed views (unauthenticated or wizard flows)
+  const isFullBleed = !isAuthenticated || ['landing', 'login', 'signup', 'onboarding', 'processing', 'ats-result', 'baseline'].includes(currentTab);
+
+  if (isFullBleed) {
+    return (
+      <div className="min-h-screen bg-[#F8FAFC] text-[#0A192F] font-sans flex flex-col justify-between selection:bg-[#FFDE59]">
+        <div>
+          <Navbar
+            currentTab={currentTab}
+            onNavigate={handleNavigate}
+            isAuthenticated={isAuthenticated}
+            userName={currentStore.profile.fullName}
+            onLogout={handleLogout}
+          />
+          <main>
+            {currentTab === 'landing' && (
+              <LandingPage
+                onGetStarted={() => handleNavigate('signup')}
+                onSignIn={() => handleNavigate('login')}
+              />
+            )}
+            {currentTab === 'login' && (
+              <LoginPage
+                onLoginSuccess={handleLoginSuccess}
+                onNavigateToSignup={() => handleNavigate('signup')}
+              />
+            )}
+            {currentTab === 'signup' && (
+              <SignupPage
+                onSignupSuccess={handleSignupSuccess}
+                onNavigateToLogin={() => handleNavigate('login')}
+              />
+            )}
+            {currentTab === 'onboarding' && (
+              <OnboardingWizard onComplete={handleOnboardingComplete} />
+            )}
+            {currentTab === 'processing' && (
+              <ResumeProcessingScreen onComplete={handleProcessingComplete} />
+            )}
+            {currentTab === 'ats-result' && (
+              <ATSResultPage onGoToDashboard={handleATSGoToBaseline} />
+            )}
+            {currentTab === 'baseline' && (
+              <BaselineAssessmentPage onComplete={handleBaselineComplete} />
+            )}
+          </main>
+        </div>
+      </div>
+    );
+  }
+
+  // Dashboard & Authenticated App Shell with Left Sidebar
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-[#0A192F] font-sans flex flex-col justify-between selection:bg-[#FFDE59]">
-      <div>
-        {/* Global Minimal SaaS Navbar */}
+    <div className="min-h-screen bg-[#F8FAFC] text-[#0F172A] font-sans flex selection:bg-[#FEF08A]">
+      {/* Left Sidebar */}
+      <Sidebar currentTab={currentTab} onNavigate={handleNavigate} />
+
+      {/* Main Right Content Layout */}
+      <div className="flex-1 flex flex-col min-w-0">
         <Navbar
           currentTab={currentTab}
           onNavigate={handleNavigate}
@@ -117,45 +173,7 @@ export function App() {
           onLogout={handleLogout}
         />
 
-        {/* Main Content Router */}
-        <main>
-          {currentTab === 'landing' && (
-            <LandingPage
-              onGetStarted={() => handleNavigate('signup')}
-              onSignIn={() => handleNavigate('login')}
-            />
-          )}
-
-          {currentTab === 'login' && (
-            <LoginPage
-              onLoginSuccess={handleLoginSuccess}
-              onNavigateToSignup={() => handleNavigate('signup')}
-            />
-          )}
-
-          {currentTab === 'signup' && (
-            <SignupPage
-              onSignupSuccess={handleSignupSuccess}
-              onNavigateToLogin={() => handleNavigate('login')}
-            />
-          )}
-
-          {currentTab === 'onboarding' && (
-            <OnboardingWizard onComplete={handleOnboardingComplete} />
-          )}
-
-          {currentTab === 'processing' && (
-            <ResumeProcessingScreen onComplete={handleProcessingComplete} />
-          )}
-
-          {currentTab === 'ats-result' && (
-            <ATSResultPage onGoToDashboard={handleATSGoToBaseline} />
-          )}
-
-          {currentTab === 'baseline' && (
-            <BaselineAssessmentPage onComplete={handleBaselineComplete} />
-          )}
-
+        <main className="flex-1">
           {currentTab === 'dashboard' && (
             <CandidateDashboard onNavigate={handleNavigate} />
           )}
@@ -170,9 +188,7 @@ export function App() {
           {currentTab === 'job' && (
             <TargetJobSetup
               currentJob={jobData}
-              onJobUpdated={(j) => {
-                setJobData(j);
-              }}
+              onJobUpdated={(j) => setJobData(j)}
               onProceed={() => handleNavigate('resume')}
             />
           )}
@@ -196,7 +212,10 @@ export function App() {
           )}
 
           {currentTab === 'interview' && (
-            <AdaptiveInterview onProceedToCoding={() => handleNavigate('coding')} />
+            <AdaptiveInterview
+              onProceedToCoding={() => handleNavigate('coding')}
+              onNavigate={handleNavigate}
+            />
           )}
 
           {currentTab === 'project' && (
@@ -227,47 +246,13 @@ export function App() {
 
           {currentTab === 'reassessment' && (
             <ReassessmentSimulator
-              onBackToDashboard={() => {
-                handleNavigate('dashboard');
-              }}
+              onBackToDashboard={() => handleNavigate('dashboard')}
             />
           )}
         </main>
       </div>
-
-      {/* COMPACT SAAS FOOTER */}
-      <footer className="bg-white border-t border-[#E2E8F0] py-8 text-xs text-[#64748B] mt-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
-          <div className="space-y-1">
-            <div className="flex items-center space-x-2">
-              <div className="w-5 h-5 rounded bg-[#0A192F] text-white flex items-center justify-center font-extrabold text-[9px]">
-                CF
-              </div>
-              <span className="font-bold text-[#0A192F]">CareerForge AI</span>
-            </div>
-            <p className="text-[11px] text-[#64748B]">Know where you stand before you apply.</p>
-          </div>
-
-          <div className="flex space-x-12 text-xs">
-            <div className="space-y-1">
-              <span className="font-bold text-[#0A192F] uppercase text-[10px] block">Product</span>
-              <button onClick={() => handleNavigate('readiness')} className="block hover:underline">Readiness</button>
-              <button onClick={() => handleNavigate('gap')} className="block hover:underline">Skill Gap</button>
-              <button onClick={() => handleNavigate('roadmap')} className="block hover:underline">Roadmap</button>
-            </div>
-            <div className="space-y-1">
-              <span className="font-bold text-[#0A192F] uppercase text-[10px] block">Company</span>
-              <span className="block cursor-pointer hover:underline">About</span>
-              <span className="block cursor-pointer hover:underline">Contact</span>
-            </div>
-          </div>
-
-          <div className="text-[11px] text-[#64748B]">
-            © 2026 CareerForge AI. All rights reserved.
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }
+
 export default App;
