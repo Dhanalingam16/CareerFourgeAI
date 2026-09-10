@@ -6,7 +6,9 @@ import { SignupPage } from './pages/SignupPage';
 import { OnboardingWizard } from './pages/OnboardingWizard';
 import { ResumeProcessingScreen } from './pages/ResumeProcessingScreen';
 import { ATSResultPage } from './pages/ATSResultPage';
+import { BaselineAssessmentPage } from './pages/BaselineAssessmentPage';
 import { CandidateDashboard } from './pages/CandidateDashboard';
+import { AssessmentPlayer } from './pages/AssessmentPlayer';
 import { TargetJobSetup } from './pages/TargetJobSetup';
 import { ResumeUpload } from './pages/ResumeUpload';
 import { SkillTruthProfile } from './pages/SkillTruthProfile';
@@ -18,49 +20,54 @@ import { SQLWorkspace } from './pages/SQLWorkspace';
 import { JobReadinessDashboard } from './pages/JobReadinessDashboard';
 import { PersonalizedRoadmapPage } from './pages/PersonalizedRoadmap';
 import { ReassessmentSimulator } from './pages/ReassessmentSimulator';
+import { userStore } from './services/userStore';
 import { JobDetails, SkillTruthResponse, JobGapResponse, ReadinessScore, PersonalizedRoadmap, UserProfileData, CareerGoalData, ClaimedSkillItem } from './types';
 
 export function App() {
   const [currentTab, setCurrentTab] = useState<string>('landing');
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState<boolean>(false);
-  const [userName, setUserName] = useState<string>('Alex Mercer');
-  const [targetRole, setTargetRole] = useState<string>('Software Engineer');
-  const [readinessScore, setReadinessScore] = useState<number>(72);
+  const [selectedAssessmentId, setSelectedAssessmentId] = useState<string>('binary-search');
 
   // App State Data
-  const [userProfile, setUserProfile] = useState<UserProfileData | null>(null);
-  const [careerGoal, setCareerGoal] = useState<CareerGoalData | null>(null);
-  const [claimedSkills, setClaimedSkills] = useState<ClaimedSkillItem[]>([]);
   const [jobData, setJobData] = useState<JobDetails | null>(null);
   const [truthData, setTruthData] = useState<SkillTruthResponse | null>(null);
   const [gapData, setGapData] = useState<JobGapResponse | null>(null);
   const [readinessData, setReadinessData] = useState<ReadinessScore | null>(null);
   const [roadmapData, setRoadmapData] = useState<PersonalizedRoadmap | null>(null);
 
-  const handleNavigate = (tab: string) => {
+  const handleNavigate = (tab: string, targetId?: string) => {
     // Protected routes check
-    const protectedTabs = ['dashboard', 'job', 'resume', 'truth', 'gap', 'interview', 'project', 'coding', 'sql', 'readiness', 'roadmap', 'reassessment'];
+    const protectedTabs = [
+      'dashboard', 'baseline', 'assessment-player', 'job', 'resume', 
+      'truth', 'gap', 'interview', 'project', 'coding', 'sql', 
+      'readiness', 'roadmap', 'reassessment'
+    ];
+
     if (!isAuthenticated && protectedTabs.includes(tab)) {
       setCurrentTab('login');
       return;
     }
+
+    if (targetId) {
+      setSelectedAssessmentId(targetId);
+      setCurrentTab('assessment-player');
+      return;
+    }
+
     setCurrentTab(tab);
   };
 
   // SIGNUP HANDLER -> MUST GO TO ONBOARDING (NEVER DIRECTLY TO DASHBOARD)
   const handleSignupSuccess = (user: { name: string; email: string }) => {
+    userStore.signup(user.name, user.email);
     setIsAuthenticated(true);
-    setUserName(user.name);
-    setHasCompletedOnboarding(false);
     setCurrentTab('onboarding');
   };
 
   // LOGIN HANDLER -> RETURNING USERS GO DIRECTLY TO DASHBOARD
   const handleLoginSuccess = (user: { name: string; email: string }) => {
+    userStore.login(user.name, user.email);
     setIsAuthenticated(true);
-    setUserName(user.name);
-    setHasCompletedOnboarding(true);
     setCurrentTab('dashboard');
   };
 
@@ -71,13 +78,7 @@ export function App() {
     skills: ClaimedSkillItem[];
     resumeFile: string | null;
   }) => {
-    setUserProfile(data.profile);
-    setCareerGoal(data.goal);
-    setClaimedSkills(data.skills);
-    if (data.goal.targetRole) {
-      setTargetRole(data.goal.targetRole);
-    }
-    setHasCompletedOnboarding(true);
+    userStore.saveOnboarding(data.profile, data.goal, data.skills, data.resumeFile);
     setCurrentTab('processing');
   };
 
@@ -86,17 +87,23 @@ export function App() {
     setCurrentTab('ats-result');
   };
 
-  // ATS RESULT GO TO DASHBOARD HANDLER
-  const handleATSGoToDashboard = () => {
+  // ATS RESULT GO TO BASELINE ASSESSMENT
+  const handleATSGoToBaseline = () => {
+    setCurrentTab('baseline');
+  };
+
+  // BASELINE ASSESSMENT COMPLETED -> DASHBOARD
+  const handleBaselineComplete = () => {
     setCurrentTab('dashboard');
   };
 
   const handleLogout = () => {
+    userStore.logout();
     setIsAuthenticated(false);
-    setHasCompletedOnboarding(false);
-    setUserName('');
     setCurrentTab('landing');
   };
+
+  const currentStore = userStore.getSnapshot();
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-[#0A192F] font-sans flex flex-col justify-between selection:bg-[#FFDE59]">
@@ -106,7 +113,7 @@ export function App() {
           currentTab={currentTab}
           onNavigate={handleNavigate}
           isAuthenticated={isAuthenticated}
-          userName={userName}
+          userName={currentStore.profile.fullName}
           onLogout={handleLogout}
         />
 
@@ -142,17 +149,21 @@ export function App() {
           )}
 
           {currentTab === 'ats-result' && (
-            <ATSResultPage onGoToDashboard={handleATSGoToDashboard} />
+            <ATSResultPage onGoToDashboard={handleATSGoToBaseline} />
+          )}
+
+          {currentTab === 'baseline' && (
+            <BaselineAssessmentPage onComplete={handleBaselineComplete} />
           )}
 
           {currentTab === 'dashboard' && (
-            <CandidateDashboard
-              truthData={truthData}
-              gapData={gapData}
-              readinessData={readinessData}
-              userName={userName}
-              targetRole={targetRole}
-              onNavigate={handleNavigate}
+            <CandidateDashboard onNavigate={handleNavigate} />
+          )}
+
+          {currentTab === 'assessment-player' && (
+            <AssessmentPlayer
+              assessmentId={selectedAssessmentId}
+              onComplete={() => handleNavigate('dashboard')}
             />
           )}
 
@@ -161,7 +172,6 @@ export function App() {
               currentJob={jobData}
               onJobUpdated={(j) => {
                 setJobData(j);
-                setTargetRole(j.title);
               }}
               onProceed={() => handleNavigate('resume')}
             />
@@ -210,15 +220,14 @@ export function App() {
 
           {currentTab === 'roadmap' && (
             <PersonalizedRoadmapPage
-              roadmapData={roadmapData}
               onRunReassessment={() => handleNavigate('reassessment')}
+              onNavigateToAssessment={(targetId) => handleNavigate('assessment-player', targetId)}
             />
           )}
 
           {currentTab === 'reassessment' && (
             <ReassessmentSimulator
               onBackToDashboard={() => {
-                setReadinessScore(81);
                 handleNavigate('dashboard');
               }}
             />
