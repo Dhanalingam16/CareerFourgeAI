@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   LayoutGrid, Sliders, Code, Mic, Database, FileText, Target,
-  TrendingUp, Map, User, Settings, ChevronDown, Sparkles
+  TrendingUp, Map, User, Settings, ChevronDown, Sparkles, ShieldCheck
 } from 'lucide-react';
 import { useUserStore } from '../hooks/useUserStore';
 
@@ -174,6 +174,19 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onNavigate }) => {
               <User className="w-4 h-4 text-[#64748B]" />
               <span>Profile</span>
             </div>
+          </button>
+
+          <button
+            onClick={() => onNavigate('test-center')}
+            className={getNavClass('test-center')}
+          >
+            <div className="flex items-center space-x-2.5">
+              <ShieldCheck className={`w-4 h-4 ${currentTab === 'test-center' ? 'text-[#0284C7]' : 'text-[#64748B]'}`} />
+              <span>Test Center</span>
+            </div>
+            <span className="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-[#E0F2FE] text-[#0284C7]">
+              MCP
+            </span>
           </button>
 
           <button

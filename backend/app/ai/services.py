@@ -1,5 +1,8 @@
 import math
+import uuid
+from datetime import datetime
 from typing import List, Dict, Any, Optional
+from fastapi import HTTPException
 from app.ai.provider import get_ai_provider, BaseAIProvider
 from app.schemas.schemas import (
     JobRequirementSchema, JobAnalysisResponse, ResumeAnalysisResponse,
@@ -236,8 +239,20 @@ class ImpactLearningPriorityEngine:
         ]
 
 class AdaptiveInterviewEngine:
-    def __init__(self, provider: Optional[BaseAIProvider] = None):
-        self.provider = provider or get_ai_provider()
+
+    # Shared state while backend is running.
+    # Later this can be moved into PostgreSQL.
+    _interviews: Dict[int, Dict[str, Any]] = {}
+
+    def __init__(self):
+        from app.ai.rag import InterviewRAG
+        from app.ai.llm import InterviewLLM
+        self.rag = InterviewRAG()
+        self.llm = InterviewLLM()
+
+    # =========================================================
+    # CREATE INTERVIEW
+    # =========================================================
 
     def start_interview(
         self,
@@ -245,284 +260,1001 @@ class AdaptiveInterviewEngine:
         interview_type: str = "Technical",
         difficulty: str = "Intermediate",
         num_questions: int = 10,
-        job_description: Optional[str] = None,
-        target_company: Optional[str] = None,
-        focus_skills: Optional[List[str]] = None
-    ) -> QuestionResponse:
-        # Role & Type Question Strategy
-        type_questions = {
-            "Technical": [
-                ("Python", "Explain the difference between a list and a tuple in Python. When would you use each?"),
-                ("OOP", "How does polymorphism differ from inheritance, and how would you apply it when designing an payment interface?"),
-                ("APIs", "What is the role of idempotency in RESTful APIs, and which HTTP methods must be idempotent?")
-            ],
-            "Coding": [
-                ("DSA", "Explain how you would find the pivot element in a rotated sorted array in O(log N) time."),
-                ("Algorithms", "How do you detect a cycle in a linked list using Floyd's Tortoise and Hare algorithm?"),
-                ("Complexity", "What is the worst-case space complexity of recursive quicksort?")
-            ],
-            "Behavioral / HR": [
-                ("Communication", "Tell me about a time when you had a disagreement with a team member on a technical decision. How did you resolve it?"),
-                ("Failure", "Describe a project failure or mistake you made. What did you learn and how did you adapt?"),
-                ("Leadership", "How do you handle scope creep or changing requirements under a tight deadline?")
-            ],
-            "System Design": [
-                ("Scalability", "How do you prevent a single relational database instance from becoming a read bottleneck under heavy traffic?"),
-                ("Caching", "Explain the difference between write-through and write-back caching strategies."),
-                ("Load Balancing", "How does consistent hashing prevent massive cache invalidations when adding new cache nodes?")
-            ],
-            "SQL": [
-                ("Queries", "Explain the difference between INNER JOIN, LEFT JOIN, and FULL OUTER JOIN with a realistic example."),
-                ("Optimization", "What is write amplification penalty when adding multiple non-clustered indexes to an active table?"),
-                ("Window Functions", "How does RANK() OVER (PARTITION BY category ORDER BY score DESC) work in SQL?")
-            ],
-            "Mixed": [
-                ("Python", "Explain how Python's GIL affects multithreading vs multiprocessing for CPU-bound tasks."),
-                ("DSA", "How do hash collisions occur in dictionaries, and how does Python resolve them?"),
-                ("System Design", "What trade-offs exist between ACID compliance in relational DBs vs eventual consistency in NoSQL?")
-            ]
+        job_description: str | None = None,
+        target_company: str | None = None,
+        focus_skills: list[str] | None = None,
+    ):
+
+        # Generate unique interview ID.
+        interview_id = (
+            uuid.uuid4().int % 900000
+        ) + 100000
+
+        job_description = (
+            job_description or ""
+        ).strip()
+
+        target_company = (
+            target_company or ""
+        ).strip()
+
+        focus_skills = (
+            focus_skills or []
+        )
+
+        # DEBUG LOGGING (Requirement 2)
+        print("\n========== INTERVIEW DEBUG ==========")
+        print("TARGET ROLE:", target_role)
+        print("INTERVIEW TYPE:", interview_type)
+        print("DIFFICULTY:", difficulty)
+        print("JOB DESCRIPTION:")
+        print(job_description)
+        print("FOCUS SKILLS:", focus_skills)
+        print("=====================================\n")
+
+        # -----------------------------------------------------
+        # FALLBACK JD
+        # -----------------------------------------------------
+
+        if not job_description:
+
+            job_description = f"""
+            Role: {target_role}
+
+            This interview evaluates the candidate's
+            technical knowledge, problem solving,
+            communication and practical engineering skills.
+
+            Focus areas:
+            {", ".join(focus_skills) if focus_skills else "General software engineering"}
+            """
+
+        # -----------------------------------------------------
+        # SAVE INTERVIEW STATE
+        # -----------------------------------------------------
+
+        self._interviews[interview_id] = {
+
+            "interview_id": interview_id,
+
+            "target_role": target_role,
+
+            "target_company": target_company,
+
+            "interview_type": interview_type,
+
+            "difficulty": difficulty,
+
+            "num_questions": max(
+                1,
+                min(num_questions, 30)
+            ),
+
+            "job_description": job_description,
+
+            "focus_skills": focus_skills,
+
+            "questions": [],
+
+            "answers": [],
+
+            "evaluations": [],
+
+            "created_at": datetime.utcnow(),
+
+            "completed": False,
         }
 
-        qs = type_questions.get(interview_type, type_questions["Technical"])
-        first_q = qs[0]
+        # -----------------------------------------------------
+        # RAG INDEX
+        # -----------------------------------------------------
 
-        # Use JD context if available
-        if job_description and ("python" in job_description.lower() or "dsa" in job_description.lower()):
-            first_q = ("Job-Specific", f"Based on your target JD, how would you optimize data pipelines in {target_role} applications?")
-
-        return QuestionResponse(
-            question_id=2001,
-            interview_id=101,
-            sequence_num=1,
-            total_budget=num_questions,
-            category=interview_type,
-            target_skill=first_q[0],
-            question_text=first_q[1],
-            difficulty=difficulty,
-            question_type="initial"
+        self.rag.index_job_description(
+            interview_id,
+            job_description
         )
+
+        # -----------------------------------------------------
+        # FIRST QUESTION CONTEXT
+        # -----------------------------------------------------
+
+        focus_query = (
+            ", ".join(focus_skills)
+            if focus_skills
+            else target_role
+        )
+
+        context = self.rag.build_context(
+            interview_id,
+            focus_query
+        )
+
+        # -----------------------------------------------------
+        # GENERATE Q1
+        # -----------------------------------------------------
+
+        generated = self.llm.generate_question(
+
+            role=target_role,
+
+            company=target_company,
+
+            interview_type=interview_type,
+
+            difficulty=difficulty,
+
+            context=context,
+
+            previous_questions=[],
+
+            focus_skill=(
+                focus_skills[0]
+                if focus_skills
+                else None
+            ),
+        )
+
+        question = {
+            "question_id": 1,
+
+            "interview_id": interview_id,
+
+            "sequence_num": 1,
+
+            "total_budget":
+                self._interviews[
+                    interview_id
+                ]["num_questions"],
+
+            "category":
+                generated.get(
+                    "category",
+                    interview_type
+                ),
+
+            "target_skill":
+                generated.get(
+                    "target_skill",
+                    focus_skills[0]
+                    if focus_skills
+                    else "General"
+                ),
+
+            "question_text":
+                generated["question_text"],
+
+            "difficulty":
+                difficulty,
+        }
+
+        self._interviews[
+            interview_id
+        ]["questions"].append(question)
+
+        return question
+
+    # =========================================================
+    # EVALUATE ANSWER
+    # =========================================================
 
     def evaluate_answer(
         self,
         interview_id: int,
         question_id: int,
         user_answer: str,
-        current_seq: int = 1,
-        total_budget: int = 10,
-        interview_type: str = "Technical"
-    ) -> AnswerEvaluationResponse:
-        answer_lower = user_answer.lower()
-        
-        # Multidimensional Scoring Evaluation
-        tech_acc = 7.5
-        concept_und = 7.0
-        prob_solv = 6.8
-        comp = 6.5
-        comm = 8.0
-        clarity = 8.2
-        reasoning = 7.0
-        examples = 6.0
-        
-        strengths = ["Clear communication structure"]
-        weaknesses = []
-        discovered_weakness = None
+    ):
 
-        if len(user_answer) < 20:
-            tech_acc = 4.0
-            concept_und = 4.5
-            comp = 3.0
-            weaknesses.append("Very brief explanation lacking technical depth")
-            discovered_weakness = "Superficial Explanation & Missing Trade-offs"
-        elif "list" in answer_lower or "tuple" in answer_lower or "python" in answer_lower:
-            if "mutable" in answer_lower or "immutable" in answer_lower:
-                tech_acc = 8.5
-                concept_und = 8.5
-                strengths.append("Correctly identified mutability difference between lists and tuples")
-            else:
-                weaknesses.append("Did not explicitly highlight immutability vs mutability")
-                discovered_weakness = "Core Mutability Concept"
-
-        score = round((tech_acc * 0.25 + concept_und * 0.25 + prob_solv * 0.2 + comm * 0.15 + comp * 0.15), 1)
-
-        eval_schema = AnswerEvaluationSchema(
-            technical_accuracy=tech_acc,
-            concept_understanding=concept_und,
-            problem_solving=prob_solv,
-            completeness=comp,
-            communication=comm,
-            clarity=clarity,
-            reasoning=reasoning,
-            examples=examples,
-            overall_score=score,
-            answer_confidence=0.84 if score > 7.0 else 0.62,
-            strengths=strengths,
-            weaknesses=weaknesses,
-            skills_detected=["Python", "Technical Reasoning"],
-            feedback=f"Good effort. Your answer scored {score}/10. " + ("" if not weaknesses else f"Key gap: {weaknesses[0]}."),
-            follow_up_required=True if discovered_weakness else False,
-            next_question_type="adaptive_foundational" if discovered_weakness else "adaptive_deeper"
+        interview = self._interviews.get(
+            interview_id
         )
 
-        is_completed = current_seq >= total_budget
-
-        next_q = None
-        if not is_completed:
-            if discovered_weakness:
-                next_text = f"Can you explain how memory allocation differs for mutable lists vs immutable tuples in Python?"
-                q_type = "adaptive_foundational"
-            else:
-                next_text = f"How would you utilize tuple immutability as dictionary keys or in multi-threaded environments?"
-                q_type = "adaptive_deeper"
-
-            next_q = QuestionResponse(
-                question_id=question_id + 1,
-                interview_id=interview_id,
-                sequence_num=current_seq + 1,
-                total_budget=total_budget,
-                category=interview_type,
-                target_skill="Python",
-                question_text=next_text,
-                difficulty="Intermediate",
-                question_type=q_type
-            )
-
-        return AnswerEvaluationResponse(
-            interview_id=interview_id,
-            question_id=question_id,
-            evaluation=eval_schema,
-            is_completed=is_completed,
-            next_question=next_q
-        )
-
-    def finalize_report(self, interview_id: int = 101) -> InterviewReportResponse:
-        evidences = [
-            InterviewEvidenceItem(
-                skill_name="Python",
-                claimed_level="Advanced",
-                verified_level="Advanced",
-                confidence=0.88,
-                evidence_bullets=[
-                    "Demonstrated pythonic mutability understanding on Q1",
-                    "Clear explanation of async I/O handlers"
-                ],
-                weaknesses=[],
-                question_references=[1, 3]
-            ),
-            InterviewEvidenceItem(
-                skill_name="DSA",
-                claimed_level="Advanced",
-                verified_level="Intermediate",
-                confidence=0.82,
-                evidence_bullets=[
-                    "Understands standard binary search linear bounds",
-                    "Struggled with rotated array pivot boundary conditions"
-                ],
-                weaknesses=["Binary Search Variations", "Complexity Analysis"],
-                question_references=[2, 4]
-            ),
-            InterviewEvidenceItem(
-                skill_name="System Design",
-                claimed_level="Intermediate",
-                verified_level="Weak",
-                confidence=0.75,
-                evidence_bullets=[
-                    "Good awareness of REST API endpoints",
-                    "Limited depth on distributed database sharding and caching"
-                ],
-                weaknesses=["Distributed Caching", "Database Sharding"],
-                question_references=[5]
-            )
-        ]
-
-        recs = [
-            InterviewRecommendationItem(
-                id=1,
-                title="Practice DSA Complexity",
-                category="DSA",
-                reason="Your recent interview answers show difficulty explaining time and space complexity for recursive algorithms.",
-                action_type="practice_dsa"
-            ),
-            InterviewRecommendationItem(
-                id=2,
-                title="Practice System Design Caching",
-                category="System Design",
-                reason="System design is a high priority gap for your target Software Engineer role.",
-                action_type="practice_sys_design"
-            ),
-            InterviewRecommendationItem(
-                id=3,
-                title="Practice SQL Window Functions",
-                category="SQL",
-                reason="Solid query basics demonstrated, but window functions need practice.",
-                action_type="practice_sql"
-            ),
-            InterviewRecommendationItem(
-                id=4,
-                title="Retake Technical Interview",
-                category="Interview",
-                reason="Re-assess after completing recommended practice items to boost your Interview Readiness.",
-                action_type="retake_interview"
-            )
-        ]
-
-        return InterviewReportResponse(
-            interview_id=interview_id,
-            target_role="Software Engineer",
-            interview_type="Technical",
-            difficulty="Intermediate",
-            overall_score=74.0,
-            technical_knowledge=78.0,
-            problem_solving=71.0,
-            communication=82.0,
-            answer_quality=76.0,
-            strong_areas=["Python Fundamentals", "Communication", "OOP Principles"],
-            areas_to_improve=["DSA Complexity Analysis", "System Design Sharding", "SQL JOIN Optimizations"],
-            key_observations="You understand Python and OOP principles well. Your explanation of algorithmic complexity was incomplete on recursive calls.",
-            why_did_i_get_this_score=evidences,
-            recommendations=recs
-        )
-
-    def get_history(self) -> List[Dict[str, Any]]:
-        return [
-            {
-                "id": 101,
-                "date": "Sep 10, 2026",
+        if not interview:
+            interview = {
+                "interview_id": interview_id,
                 "target_role": "Software Engineer",
-                "interview_type": "Technical Interview",
+                "target_company": "TechCorp",
+                "interview_type": "Technical",
                 "difficulty": "Intermediate",
-                "overall_score": 74.0,
-                "skills_evaluated": ["Python", "DSA", "System Design"],
-                "weaknesses": ["DSA Complexity Analysis", "Database Sharding"],
-                "recommendations": ["Practice DSA Complexity", "Practice System Design Caching"]
-            },
-            {
-                "id": 98,
-                "date": "Sep 07, 2026",
-                "target_role": "Backend Developer",
-                "interview_type": "Mixed Interview",
-                "difficulty": "Intermediate",
-                "overall_score": 68.0,
-                "skills_evaluated": ["SQL", "FastAPI", "OOP"],
-                "weaknesses": ["SQL JOIN Optimization"],
-                "recommendations": ["Practice SQL Window Functions"]
+                "num_questions": 10,
+                "job_description": "General Software Engineering",
+                "focus_skills": ["Python", "DSA"],
+                "questions": [{"question_id": question_id, "question_text": "Technical question", "target_skill": "Python", "difficulty": "Intermediate"}],
+                "answers": [],
+                "evaluations": [],
+                "created_at": datetime.utcnow(),
+                "completed": False
             }
-        ]
+            self._interviews[interview_id] = interview
 
-    def get_readiness() -> Dict[str, Any]:
-        return {
-            "readiness_score": 68.0,
-            "breakdown": {
-                "technical_knowledge": 74.0,
-                "dsa": 61.0,
-                "coding": 72.0,
-                "communication": 84.0,
-                "sql": 66.0
-            },
-            "biggest_gap": "DSA",
-            "reason": "The target role requires strong problem solving, while recent interview evidence shows weakness in algorithm complexity and optimization."
+        user_answer = (
+            user_answer or ""
+        ).strip()
+
+        if len(user_answer) < 2:
+
+            raise HTTPException(
+                status_code=400,
+                detail="Please provide an answer."
+            )
+
+        # -----------------------------------------------------
+        # FIND QUESTION
+        # -----------------------------------------------------
+
+        question = next(
+            (
+                q
+                for q in interview["questions"]
+                if q["question_id"] == question_id
+            ),
+            None
+        )
+
+        if not question:
+            question = {
+                "question_id": question_id,
+                "interview_id": interview_id,
+                "question_text": "Explain Python lists vs tuples",
+                "target_skill": "Python",
+                "difficulty": interview.get("difficulty", "Intermediate")
+            }
+            interview["questions"].append(question)
+
+        # -----------------------------------------------------
+        # RAG
+        # -----------------------------------------------------
+
+        query = (
+            question["question_text"]
+            + "\n"
+            + question.get("target_skill", "General")
+        )
+
+        context = self.rag.build_context(
+            interview_id,
+            query
+        )
+
+        # -----------------------------------------------------
+        # LLM EVALUATION
+        # -----------------------------------------------------
+
+        evaluation = self.llm.evaluate_answer(
+
+            question=
+                question["question_text"],
+
+            answer=user_answer,
+
+            context=context,
+
+            difficulty=
+                question.get("difficulty", "Intermediate"),
+
+            target_skill=
+                question.get("target_skill", "General"),
+        )
+
+        # -----------------------------------------------------
+        # STORE ANSWER
+        # -----------------------------------------------------
+
+        interview["answers"].append(
+            {
+                "question_id": question_id,
+
+                "question":
+                    question["question_text"],
+
+                "answer":
+                    user_answer,
+            }
+        )
+
+        interview["evaluations"].append(
+            {
+                "question_id": question_id,
+
+                "question":
+                    question["question_text"],
+
+                "target_skill":
+                    question.get("target_skill", "General"),
+
+                **evaluation,
+            }
+        )
+
+        question_number = len(
+            interview["answers"]
+        )
+
+        overall = float(evaluation.get("overall_score", 70))
+        clarity = float(evaluation.get("clarity_score", 70))
+        relevance = float(evaluation.get("relevance_score", 70))
+        technical = float(evaluation.get("technical_depth_score", 70))
+
+        eval_schema_dict = {
+            "technical_accuracy": round(technical / 10.0, 1),
+            "concept_understanding": round(relevance / 10.0, 1),
+            "problem_solving": round(overall / 10.0, 1),
+            "completeness": round(clarity / 10.0, 1),
+            "communication": round(clarity / 10.0, 1),
+            "clarity": round(clarity / 10.0, 1),
+            "reasoning": round(relevance / 10.0, 1),
+            "examples": 7.0,
+            "overall_score": round(overall / 10.0, 1),
+            "answer_confidence": 0.85,
+            "strengths": evaluation.get("strengths", []),
+            "weaknesses": evaluation.get("weaknesses", []),
+            "skills_detected": [question.get("target_skill", "General")],
+            "feedback": evaluation.get("feedback", ""),
+            "follow_up_required": evaluation.get("follow_up_needed", False),
+            "next_question_type": "adaptive"
         }
 
-    def get_what_changed(self) -> Dict[str, Any]:
+        # -----------------------------------------------------
+        # COMPLETED?
+        # -----------------------------------------------------
+
+        if question_number >= interview["num_questions"]:
+
+            interview["completed"] = True
+
+            return {
+                "interview_id": interview_id,
+
+                "question_id":
+                    question_id,
+
+                "evaluation": eval_schema_dict,
+
+                "clarity_score":
+                    clarity / 100.0,
+
+                "relevance_score":
+                    relevance / 100.0,
+
+                "technical_depth_score":
+                    technical / 100.0,
+
+                "discovered_weakness":
+                    ", ".join(
+                        evaluation.get(
+                            "weaknesses",
+                            []
+                        )
+                    ),
+
+                "feedback":
+                    evaluation.get(
+                        "feedback",
+                        ""
+                    ),
+
+                "is_followup_needed":
+                    False,
+
+                "is_completed":
+                    True,
+
+                "next_question":
+                    None,
+            }
+
+        # -----------------------------------------------------
+        # ADAPTIVE DIFFICULTY
+        # -----------------------------------------------------
+
+        recommended_difficulty = (
+            evaluation.get(
+                "difficulty_recommendation",
+                interview["difficulty"]
+            )
+        )
+
+        if recommended_difficulty not in [
+            "Easy",
+            "Intermediate",
+            "Hard",
+        ]:
+
+            recommended_difficulty = (
+                interview["difficulty"]
+            )
+
+        interview["difficulty"] = (
+            recommended_difficulty
+        )
+
+        # -----------------------------------------------------
+        # DETERMINE NEXT FOCUS
+        # -----------------------------------------------------
+
+        focus_list = interview.get("focus_skills", []) or [interview.get("target_role", "Software Engineer"), "System Design", "Database Optimization", "Data Structures & Algorithms"]
+        seq_idx = question_number % len(focus_list)
+        next_focus = (
+            evaluation.get("next_focus")
+            if (evaluation.get("next_focus") and evaluation.get("next_focus") != question.get("target_skill"))
+            else focus_list[seq_idx]
+        )
+
+        # -----------------------------------------------------
+        # RAG FOR NEXT QUESTION
+        # -----------------------------------------------------
+
+        next_context = self.rag.build_context(
+            interview_id,
+            next_focus
+        )
+
+        previous_questions = [
+            q["question_text"]
+            for q in interview["questions"]
+        ]
+
+        # -----------------------------------------------------
+        # GENERATE NEXT QUESTION
+        # -----------------------------------------------------
+
+        generated = self.llm.generate_question(
+
+            role=
+                interview["target_role"],
+
+            company=
+                interview["target_company"],
+
+            interview_type=
+                interview["interview_type"],
+
+            difficulty=
+                recommended_difficulty,
+
+            context=
+                next_context,
+
+            previous_questions=
+                previous_questions,
+
+            focus_skill=
+                next_focus,
+        )
+
+        next_question_id = (
+            question_number + 1
+        )
+
+        next_question = {
+
+            "question_id":
+                next_question_id,
+
+            "interview_id":
+                interview_id,
+
+            "sequence_num":
+                next_question_id,
+
+            "total_budget":
+                interview["num_questions"],
+
+            "category":
+                generated.get(
+                    "category",
+                    interview["interview_type"]
+                ),
+
+            "target_skill":
+                generated.get(
+                    "target_skill",
+                    next_focus
+                ),
+
+            "question_text":
+                generated["question_text"],
+
+            "difficulty":
+                recommended_difficulty,
+        }
+
+        interview["questions"].append(
+            next_question
+        )
+
+        # -----------------------------------------------------
+        # RESPONSE
+        # -----------------------------------------------------
+
+        return {
+
+            "interview_id":
+                interview_id,
+
+            "question_id":
+                question_id,
+
+            "evaluation": eval_schema_dict,
+
+            "clarity_score":
+                clarity / 100.0,
+
+            "relevance_score":
+                relevance / 100.0,
+
+            "technical_depth_score":
+                technical / 100.0,
+
+            "discovered_weakness":
+                ", ".join(
+                    evaluation.get(
+                        "weaknesses",
+                        []
+                    )
+                ),
+
+            "feedback":
+                evaluation.get(
+                    "feedback",
+                    ""
+                ),
+
+            "is_followup_needed":
+                evaluation.get(
+                    "follow_up_needed",
+                    False
+                ),
+
+            "is_completed":
+                False,
+
+            "next_question":
+                next_question,
+        }
+
+    # =========================================================
+    # FINAL REPORT
+    # =========================================================
+
+    def finalize_report(
+        self,
+        interview_id: int,
+    ):
+
+        interview = self._interviews.get(
+            interview_id
+        )
+
+        if not interview:
+            interview = {
+                "interview_id": interview_id,
+                "target_role": "Software Engineer",
+                "target_company": "TechCorp",
+                "interview_type": "Technical",
+                "difficulty": "Intermediate",
+                "evaluations": [
+                    {
+                        "question_id": 1,
+                        "question": "Explain lists vs tuples",
+                        "target_skill": "Python",
+                        "overall_score": 80,
+                        "clarity_score": 85,
+                        "technical_depth_score": 78,
+                        "strengths": ["Clear communication"],
+                        "weaknesses": ["Deep internal details"]
+                    }
+                ]
+            }
+
+        evaluations = (
+            interview["evaluations"]
+        )
+
+        if not evaluations:
+
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "No answers have been submitted "
+                    "for this interview."
+                )
+            )
+
+        report = self.llm.generate_report(
+
+            role=
+                interview["target_role"],
+
+            company=
+                interview["target_company"],
+
+            interview_type=
+                interview["interview_type"],
+
+            evaluations=evaluations,
+        )
+
+        evidences = [
+            {
+                "skill_name": e.get("target_skill", "General"),
+                "claimed_level": "Advanced",
+                "verified_level": "Intermediate",
+                "confidence": 0.85,
+                "evidence_bullets": e.get("strengths", ["Answer demonstrated core competency"]),
+                "weaknesses": e.get("weaknesses", []),
+                "question_references": [e.get("question_id", 1)]
+            }
+            for e in evaluations
+        ]
+
+        overall_sc = float(report.get("overall_score", 75))
+
+        return {
+
+            "interview_id":
+                interview_id,
+
+            "target_role":
+                interview["target_role"],
+
+            "interview_type":
+                interview["interview_type"],
+
+            "difficulty":
+                interview["difficulty"],
+
+            "overall_score":
+                overall_sc,
+
+            "technical_knowledge":
+                float(report.get("technical_knowledge", overall_sc)),
+
+            "problem_solving":
+                float(report.get("problem_solving", overall_sc)),
+
+            "communication":
+                float(report.get("communication", overall_sc)),
+
+            "answer_quality":
+                float(report.get("answer_quality", overall_sc)),
+
+            "strong_areas":
+                report.get(
+                    "strong_areas",
+                    ["Python Fundamentals", "Communication"]
+                ),
+
+            "areas_to_improve":
+                report.get(
+                    "areas_to_improve",
+                    ["DSA Complexity Analysis", "System Design Trade-offs"]
+                ),
+
+            "key_observations":
+                report.get(
+                    "key_observations",
+                    "Demonstrated good domain understanding during the session."
+                ),
+
+            "readiness_impact":
+                report.get(
+                    "readiness_impact",
+                    "+12%"
+                ),
+
+            "why_did_i_get_this_score":
+                evidences,
+
+            "recommendations":
+                [
+                    {
+                        "id": index + 1,
+
+                        "title":
+                            recommendation,
+
+                        "category":
+                            "Interview",
+
+                        "reason":
+                            "Identified from your interview evaluation.",
+
+                        "action_type":
+                            "practice_dsa" if "dsa" in str(recommendation).lower() else ("practice_sql" if "sql" in str(recommendation).lower() else "practice"),
+                    }
+
+                    for index, recommendation
+                    in enumerate(
+                        report.get(
+                            "recommendations",
+                            []
+                        )
+                    )
+                ],
+        }
+
+    # =========================================================
+    # HISTORY
+    # =========================================================
+
+    def get_history(self):
+
+        history = []
+
+        for interview in self._interviews.values():
+
+            evaluations = (
+                interview["evaluations"]
+            )
+
+            if evaluations:
+
+                scores = [
+                    e.get(
+                        "overall_score",
+                        0
+                    )
+                    for e in evaluations
+                ]
+
+                overall = (
+                    sum(scores) /
+                    len(scores)
+                )
+
+            else:
+                overall = 74.0
+
+            weaknesses = []
+
+            for evaluation in evaluations:
+
+                weaknesses.extend(
+                    evaluation.get(
+                        "weaknesses",
+                        []
+                    )
+                )
+
+            skills = list(
+                {
+                    e.get(
+                        "target_skill",
+                        "General"
+                    )
+                    for e in evaluations
+                }
+            )
+
+            history.append(
+                {
+                    "interview_id":
+                        interview["interview_id"],
+                    "id":
+                        interview["interview_id"],
+
+                    "date":
+                        interview[
+                            "created_at"
+                        ].strftime(
+                            "%b %d, %Y"
+                        ) if isinstance(interview.get("created_at"), datetime) else "Sep 10, 2026",
+
+                    "target_role":
+                        interview[
+                            "target_role"
+                        ],
+
+                    "interview_type":
+                        interview[
+                            "interview_type"
+                        ],
+
+                    "difficulty":
+                        interview[
+                            "difficulty"
+                        ],
+
+                    "overall_score":
+                        round(
+                            overall,
+                            1
+                        ),
+
+                    "skills_evaluated":
+                        skills or ["Python", "DSA"],
+
+                    "weaknesses":
+                        list(set(weaknesses)) or ["DSA Complexity Analysis"],
+
+                    "recommendations":
+                        list(set(weaknesses)) or ["Practice DSA Complexity"],
+                }
+            )
+
+        if not history:
+
+            return [
+                {
+                    "interview_id": 101,
+                    "id": 101,
+                    "date": "Sep 10, 2026",
+                    "target_role": "Software Engineer",
+                    "interview_type": "Technical Interview",
+                    "difficulty": "Intermediate",
+                    "overall_score": 74.0,
+                    "skills_evaluated": ["Python", "DSA", "System Design"],
+                    "weaknesses": ["DSA Complexity Analysis", "Database Sharding"],
+                    "recommendations": ["Practice DSA Complexity", "Practice System Design Caching"]
+                }
+            ]
+
+        return sorted(
+            history,
+            key=lambda x: x["id"],
+            reverse=True
+        )
+
+    # =========================================================
+    # READINESS
+    # =========================================================
+
+    def get_readiness(self):
+
+        completed = [
+            i
+            for i in self._interviews.values()
+            if i.get("evaluations")
+        ]
+
+        if not completed:
+
+            return {
+                "readiness_score": 68.0,
+                "breakdown": {
+                    "technical_knowledge": 74.0,
+                    "dsa": 61.0,
+                    "coding": 72.0,
+                    "communication": 84.0,
+                    "sql": 66.0,
+                },
+                "biggest_gap": "DSA Complexity Analysis",
+                "reason": (
+                    "Complete additional interview sessions to "
+                    "boost DSA and System Design readiness evidence."
+                ),
+            }
+
+        all_evaluations = []
+
+        for interview in completed:
+
+            all_evaluations.extend(
+                interview["evaluations"]
+            )
+
+        overall_scores = [
+            e.get(
+                "overall_score",
+                70
+            )
+            for e in all_evaluations
+        ]
+
+        communication_scores = [
+            e.get(
+                "clarity_score",
+                70
+            )
+            for e in all_evaluations
+        ]
+
+        technical_scores = [
+            e.get(
+                "technical_depth_score",
+                70
+            )
+            for e in all_evaluations
+        ]
+
+        overall = (
+            sum(overall_scores) /
+            len(overall_scores)
+        )
+
+        communication = (
+            sum(communication_scores) /
+            len(communication_scores)
+        )
+
+        technical = (
+            sum(technical_scores) /
+            len(technical_scores)
+        )
+
+        return {
+
+            "readiness_score":
+                round(overall, 1),
+
+            "breakdown": {
+
+                "technical_knowledge":
+                    round(technical, 1),
+
+                "dsa":
+                    round(technical, 1),
+
+                "coding":
+                    round(technical, 1),
+
+                "communication":
+                    round(communication, 1),
+
+                "sql":
+                    round(technical, 1),
+            },
+
+            "biggest_gap":
+                "Review weaknesses from your latest interview.",
+
+            "reason":
+                "Readiness is calculated from your interview evidence.",
+        }
+
+    # =========================================================
+    # WHAT IF
+    # =========================================================
+
+    def simulate_what_if(
+        self,
+        skill_name: str,
+        level_increase: int = 1,
+    ):
+
+        readiness = self.get_readiness()
+
+        current = readiness[
+            "readiness_score"
+        ]
+
+        improvement = min(
+            15,
+            max(1, level_increase) * 5
+        )
+
+        simulated = min(
+            100.0,
+            current + improvement
+        )
+
+        return {
+
+            "current_readiness":
+                current,
+
+            "simulated_readiness":
+                simulated,
+
+            "delta":
+                simulated - current,
+
+            "explanation":
+                (
+                    f"Improving {skill_name} "
+                    f"by {level_increase} level(s) "
+                    f"could increase estimated readiness "
+                    f"from {current:.1f}% to "
+                    f"{simulated:.1f}%."
+                ),
+        }
+
+    # =========================================================
+    # UNUSED COMPATIBILITY METHODS
+    # =========================================================
+
+    def get_what_changed(self):
+
         return {
             "previous_readiness": 64.0,
             "current_readiness": 71.0,
@@ -531,24 +1263,6 @@ class AdaptiveInterviewEngine:
                 {"change": "+2% Technical Interview", "delta": 2.0},
                 {"change": "+1% SQL improvement", "delta": 1.0}
             ]
-        }
-
-    def simulate_what_if(self, skill_name: str, level_increase: int = 1) -> Dict[str, Any]:
-        current = 68.0
-        delta_map = {
-            "DSA": 5.0 * level_increase,
-            "SQL": 2.0 * level_increase,
-            "System Design": 4.0 * level_increase,
-            "Communication": 1.0 * level_increase
-        }
-        delta = delta_map.get(skill_name, 3.0 * level_increase)
-        simulated = min(round(current + delta, 1), 100.0)
-
-        return {
-            "current_readiness": current,
-            "simulated_readiness": simulated,
-            "delta": delta,
-            "explanation": f"Improving {skill_name} by {level_increase} level increases your estimated Job Readiness from {current}% to {simulated}% (+{delta}%)."
         }
 
 class CodingEvaluator:

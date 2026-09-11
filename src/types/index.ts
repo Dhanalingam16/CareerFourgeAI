@@ -83,12 +83,14 @@ export interface JobGapResponse {
 
 export interface Question {
   question_id: number;
+  interview_id?: number;
   sequence_num: number;
   total_budget: number;
   category: string;
   target_skill: string;
   question_text: string;
   difficulty: string;
+  question_type?: string;
 }
 
 export interface AnswerEvaluation {

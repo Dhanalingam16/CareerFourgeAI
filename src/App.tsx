@@ -22,6 +22,7 @@ import { SQLWorkspace } from './pages/SQLWorkspace';
 import { JobReadinessDashboard } from './pages/JobReadinessDashboard';
 import { PersonalizedRoadmapPage } from './pages/PersonalizedRoadmap';
 import { ReassessmentSimulator } from './pages/ReassessmentSimulator';
+import { TestCenter } from './pages/TestCenter';
 import { userStore } from './services/userStore';
 import { JobDetails, SkillTruthResponse, JobGapResponse, ReadinessScore, PersonalizedRoadmap, UserProfileData, CareerGoalData, ClaimedSkillItem } from './types';
 
@@ -42,7 +43,7 @@ export function App() {
     const protectedTabs = [
       'dashboard', 'baseline', 'assessment-player', 'job', 'resume', 
       'truth', 'gap', 'interview', 'project', 'coding', 'aptitude', 'sql', 
-      'readiness', 'roadmap', 'reassessment'
+      'readiness', 'roadmap', 'reassessment', 'test-center'
     ];
 
     if (!isAuthenticated && protectedTabs.includes(tab)) {
@@ -253,6 +254,10 @@ export function App() {
             <ReassessmentSimulator
               onBackToDashboard={() => handleNavigate('dashboard')}
             />
+          )}
+
+          {currentTab === 'test-center' && (
+            <TestCenter />
           )}
         </main>
       </div>

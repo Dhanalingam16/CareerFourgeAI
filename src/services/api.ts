@@ -12,7 +12,9 @@ import {
   RecruiterDashboard
 } from '../types';
 
-const API_BASE = '/api/v1';
+const API_BASE = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  ? 'http://127.0.0.1:8000/api/v1'
+  : '/api/v1';
 
 async function fetchJSON<T>(endpoint: string, options?: RequestInit, fallbackData?: T): Promise<T> {
   try {
@@ -169,21 +171,15 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(config)
     }, {
-      question_id: 2001,
+      question_id: 1,
+      interview_id: 101,
       sequence_num: 1,
       total_budget: config.num_questions || 10,
       category: config.interview_type || "Technical",
-      target_skill: "Python",
-      question_text: config.interview_type === "Coding"
-        ? "Explain how you would find the pivot element in a rotated sorted array in logarithmic O(log N) time."
-        : config.interview_type === "Behavioral / HR"
-        ? "Tell me about a time when you had a disagreement with a team member on a technical decision. How did you resolve it?"
-        : config.interview_type === "System Design"
-        ? "How do you prevent a single relational database instance from becoming a read bottleneck under heavy traffic?"
-        : config.interview_type === "SQL"
-        ? "Explain the difference between INNER JOIN, LEFT JOIN, and FULL OUTER JOIN with a realistic example."
-        : "Explain the difference between a list and a tuple in Python. When would you use each?",
-      difficulty: config.difficulty || "Intermediate"
+      target_skill: "General",
+      question_text: `Based on your application for ${config.target_role || 'Software Engineer'}, can you walk me through your core technical background and key project experiences?`,
+      difficulty: config.difficulty || "Intermediate",
+      question_type: "initial"
     });
   },
 
@@ -197,72 +193,54 @@ export const api = {
       body: JSON.stringify({ interview_id: interviewId, question_id: questionId, user_answer: answerText }),
     }, {
       question_id: questionId,
-      clarity_score: 0.85,
-      relevance_score: 0.88,
-      technical_depth_score: 0.72,
-      discovered_weakness: "Complexity Analysis & Edge Cases in Rotated Arrays",
-      feedback: "Good fundamental explanation, but missed addressing memory immutability and complexity trade-offs.",
-      is_followup_needed: true,
+      evaluation: {
+        score: 8.0,
+        technical_depth: "Good",
+        star_structure: "Clear",
+        key_feedback: "Solid explanation provided.",
+        demonstrated_skills: ["Communication"],
+        missing_aspects: []
+      },
       next_question: {
         question_id: questionId + 1,
-        sequence_num: 2,
+        interview_id: interviewId,
+        sequence_num: questionId + 1,
         total_budget: 10,
         category: "Technical",
-        target_skill: "Python",
-        question_text: "Can you explain how memory allocation differs for mutable lists vs immutable tuples in Python?",
-        difficulty: "Intermediate"
-      }
+        target_skill: "System Design",
+        question_text: "Can you explain how you handle database query optimization and caching in a high-traffic production application?",
+        difficulty: "Intermediate",
+        question_type: "followup"
+      },
+      is_completed: false
     });
   },
 
-  getInterviewReport: async (interviewId: number = 101) => {
-    return fetchJSON(`/interview/${interviewId}/report`, { method: 'GET' }, {
+  getInterviewReport: async (interviewId: number = 101): Promise<any> => {
+    return fetchJSON<any>(`/interview/${interviewId}/report`, { method: 'GET' }, {
       interview_id: interviewId,
-      target_role: "Software Engineer",
-      interview_type: "Technical Interview",
-      difficulty: "Intermediate",
-      overall_score: 74.0,
-      technical_knowledge: 78.0,
-      problem_solving: 71.0,
-      communication: 82.0,
-      answer_quality: 76.0,
-      strong_areas: ["Python Fundamentals", "Communication", "OOP Principles"],
-      areas_to_improve: ["DSA Complexity Analysis", "System Design Sharding", "SQL JOIN Optimizations"],
-      key_observations: "You understand Python and OOP principles well. Your explanation of algorithmic complexity was incomplete on recursive calls.",
-      why_did_i_get_this_score: [
-        {
-          skill_name: "Python",
-          claimed_level: "Advanced",
-          verified_level: "Advanced",
-          confidence: 0.88,
-          evidence_bullets: ["Demonstrated pythonic mutability understanding on Q1", "Clear explanation of async I/O handlers"],
-          weaknesses: [],
-          question_references: [1, 3]
-        },
-        {
-          skill_name: "DSA",
-          claimed_level: "Advanced",
-          verified_level: "Intermediate",
-          confidence: 0.82,
-          evidence_bullets: ["Understands standard binary search linear bounds", "Struggled with rotated array pivot boundary conditions"],
-          weaknesses: ["Binary Search Variations", "Complexity Analysis"],
-          question_references: [2, 4]
-        },
-        {
-          skill_name: "System Design",
-          claimed_level: "Intermediate",
-          verified_level: "Weak",
-          confidence: 0.75,
-          evidence_bullets: ["Good awareness of REST API endpoints", "Limited depth on distributed database sharding and caching"],
-          weaknesses: ["Distributed Caching", "Database Sharding"],
-          question_references: [5]
-        }
+      overall_score: 78.0,
+      readiness_verdict: "INTERVIEW READY",
+      competency_scores: {
+        "Technical Depth": 80.0,
+        "STAR Methodology": 75.0,
+        "Problem Solving": 78.0,
+        "Communication": 82.0
+      },
+      evaluated_skills: [
+        { skill_name: "Python", score: 85.0, status: "STRONG" },
+        { skill_name: "System Design", score: 65.0, status: "NEEDS_WORK" }
       ],
-      recommendations: [
-        { id: 1, title: "Practice DSA Complexity", category: "DSA", reason: "Your recent interview answers show difficulty explaining time and space complexity.", action_type: "practice_dsa" },
-        { id: 2, title: "Practice System Design Caching", category: "System Design", reason: "System design is a high priority gap for your target Software Engineer role.", action_type: "practice_sys_design" },
-        { id: 3, title: "Practice SQL Window Functions", category: "SQL", reason: "Solid query basics demonstrated, but window functions need practice.", action_type: "practice_sql" },
-        { id: 4, title: "Retake Technical Interview", category: "Interview", reason: "Re-assess after completing recommended practice items.", action_type: "retake_interview" }
+      key_strengths: [
+        "Clear and structured answers using STAR method",
+        "Strong understanding of Python async concepts"
+      ],
+      critical_gaps: [
+        "Could expand on distributed database sharding and query caching strategies"
+      ],
+      actionable_recommendations: [
+        "Review Redis caching patterns",
+        "Practice binary search tree algorithms"
       ]
     });
   },

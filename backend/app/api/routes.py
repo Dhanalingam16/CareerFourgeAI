@@ -1,3 +1,5 @@
+import os
+import json
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
@@ -142,3 +144,163 @@ def run_reassessment():
 @router.get("/recruiter/dashboard", response_model=RecruiterDashboardResponse)
 def get_recruiter_dashboard():
     return RecruiterService().get_dashboard()
+
+# --- DIAGNOSTIC ENDPOINTS (Requirements 11, 12, 13) ---
+@router.post("/interview/debug-rag")
+def debug_rag(payload: dict):
+    from app.ai.rag import InterviewRAG
+    rag = InterviewRAG()
+    jd = payload.get("job_description", "")
+    query = payload.get("query", "What backend technologies are required?")
+    interview_id = 999999
+    rag.index_job_description(interview_id, jd)
+    chunks = rag.retrieve(interview_id, query, top_k=5)
+    return {
+        "query": query,
+        "chunks_found": len(chunks),
+        "context": chunks
+    }
+
+@router.post("/interview/debug-llm")
+def debug_llm(payload: dict):
+    from app.ai.llm import InterviewLLM
+    llm = InterviewLLM()
+    context = payload.get("context", "The company requires Python, FastAPI and PostgreSQL.")
+    role = payload.get("role", "Python Backend Developer")
+    res = llm.generate_question(
+        role=role,
+        company="TechCorp",
+        interview_type="Technical",
+        difficulty="Intermediate",
+        context=context,
+        previous_questions=[]
+    )
+    return res
+
+@router.get("/interview/diagnostic")
+def run_diagnostic():
+    from app.ai.rag import InterviewRAG
+    from app.ai.llm import InterviewLLM
+    from app.ai.services import AdaptiveInterviewEngine
+
+    rag_pass = False
+    llm_pass = False
+    pipeline_pass = False
+    details = []
+
+    try:
+        # 1. RAG Diagnostic
+        rag = InterviewRAG()
+        sample_jd = (
+            "We are looking for a Python Backend Developer.\n"
+            "Requirements:\n"
+            "- Strong Python programming skills\n"
+            "- Experience with FastAPI and building REST APIs\n"
+            "- PostgreSQL knowledge and SQL database optimization\n"
+            "- Docker experience and Redis caching"
+        )
+        test_id = 888888
+        rag.index_job_description(test_id, sample_jd)
+        context = rag.build_context(test_id, "FastAPI PostgreSQL")
+        if "FastAPI" in context or "Python" in context or len(context) > 20:
+            rag_pass = True
+            details.append("[✓] RAG indexing and retrieval succeeded")
+        else:
+            details.append("[X] RAG retrieval returned empty context")
+    except Exception as e:
+        details.append(f"[X] RAG error: {e}")
+
+    try:
+        # 2. LLM Diagnostic
+        llm = InterviewLLM()
+        q = llm.generate_question(
+            role="Python Backend Developer",
+            company="TechCorp",
+            interview_type="Technical",
+            difficulty="Intermediate",
+            context=context,
+            previous_questions=[]
+        )
+        if q and "question_text" in q and len(q["question_text"]) > 10:
+            llm_pass = True
+            details.append(f"[✓] LLM generated question: {q['question_text']}")
+        else:
+            details.append("[X] LLM response invalid")
+    except Exception as e:
+        details.append(f"[X] LLM error: {e}")
+
+    try:
+        # 3. Pipeline Test
+        engine = AdaptiveInterviewEngine()
+        res = engine.start_interview(
+            target_role="Python Backend Developer",
+            interview_type="Technical",
+            difficulty="Intermediate",
+            num_questions=5,
+            job_description=sample_jd,
+            focus_skills=["Python", "FastAPI", "PostgreSQL"]
+        )
+        if res and "question_text" in res:
+            pipeline_pass = True
+            details.append(f"[✓] Interview Pipeline created session {res['interview_id']}")
+    except Exception as e:
+        details.append(f"[X] Pipeline error: {e}")
+
+    report_text = "\n".join([
+        "========================================",
+        "CAREERFORGE AI INTERVIEW DIAGNOSTIC",
+        "========================================",
+        *details,
+        "========================================",
+        f"RAG STATUS: {'PASS' if rag_pass else 'FAIL'}",
+        f"LLM STATUS: {'PASS' if llm_pass else 'FAIL'}",
+        f"INTERVIEW PIPELINE: {'PASS' if pipeline_pass else 'FAIL'}",
+        "========================================"
+    ])
+
+    return {
+        "rag_status": "PASS" if rag_pass else "FAIL",
+        "llm_status": "PASS" if llm_pass else "FAIL",
+        "pipeline_status": "PASS" if pipeline_pass else "FAIL",
+        "report": report_text
+    }
+
+# --- MCP TEST AGENT ENDPOINTS ---
+@router.post("/test/run")
+def run_test_suite(payload: Optional[dict] = None):
+    from app.mcp.runner import CareerForgeTestRunner
+    scope = (payload or {}).get("scope", "full")
+    runner = CareerForgeTestRunner()
+
+    if scope == "frontend":
+        runner.test_frontend_pages()
+    elif scope == "api":
+        runner.test_backend_apis()
+    elif scope == "rag":
+        runner.test_rag_pipeline()
+    elif scope == "llm":
+        runner.test_llm_and_question_relevance()
+    elif scope == "interview":
+        runner.test_full_interview_workflow()
+    else:
+        return runner.run_all_tests()
+
+    runner.generate_ai_report()
+    return runner.evidence
+
+@router.get("/test/latest")
+def get_latest_test_results():
+    results_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "test-results")
+    evidence_path = os.path.join(results_dir, "test_evidence.json")
+    if os.path.exists(evidence_path):
+        with open(evidence_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {"status": "no_runs_yet", "message": "Run tests from the Test Center or runner script to generate evidence."}
+
+@router.post("/mcp/invoke")
+def invoke_mcp_action(payload: dict):
+    from app.mcp.server import MCPServer
+    server = MCPServer()
+    return server.handle_request(payload)
+
+

@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   ArrowLeft, Sparkles, Mic, MicOff, Video, VideoOff, MoreHorizontal,
   Maximize2, Paperclip, Send, Clock, CheckCircle2, ChevronDown, ChevronUp,
-  AlertCircle, Play, ShieldCheck, User, RefreshCw, BarChart2, X, MessageSquare
+  AlertCircle, Play, ShieldCheck, User, RefreshCw, BarChart2, X, MessageSquare,
+  Volume2, PhoneOff
 } from 'lucide-react';
 import { api } from '../services/api';
 import { useUserStore } from '../hooks/useUserStore';
@@ -29,7 +30,7 @@ export const AdaptiveInterview: React.FC<AdaptiveInterviewProps> = ({
   const [numQuestions, setNumQuestions] = useState(10);
   const [jobDescription, setJobDescription] = useState(store.goal.jobDescription || '');
   const [targetCompany, setTargetCompany] = useState(store.goal.targetCompany || 'Google');
-  const [focusSkillsInput, setFocusSkillsInput] = useState('Communication, STAR Method, React, Problem Solving');
+  const [focusSkillsInput, setFocusSkillsInput] = useState('Python, System Design, SQL, Data Structures, REST APIs');
 
   // --- LIVE MEETING STATE ---
   const [currentInterviewId, setCurrentInterviewId] = useState<number>(101);
@@ -80,16 +81,14 @@ export const AdaptiveInterview: React.FC<AdaptiveInterviewProps> = ({
     return () => clearInterval(interval);
   }, [viewMode]);
 
-  // Initial Data Load
+  // Initial Data Load & Camera + Mic Permission Prompt on Page Entry
   useEffect(() => {
     api.getInterviewHistory().then(res => setHistoryList(res));
     api.getInterviewReadiness().then(res => setReadinessData(res));
-  }, []);
 
-  // Handle Camera Stream
-  useEffect(() => {
-    if (viewMode === 'interview' && isCameraOn) {
-      navigator.mediaDevices?.getUserMedia?.({ video: true, audio: false })
+    // Request Camera and Microphone permissions in Chrome upon entering AI Interview page
+    if (navigator.mediaDevices?.getUserMedia) {
+      navigator.mediaDevices.getUserMedia({ video: true, audio: true })
         .then(stream => {
           mediaStreamRef.current = stream;
           if (videoRef.current) {
@@ -97,8 +96,28 @@ export const AdaptiveInterview: React.FC<AdaptiveInterviewProps> = ({
           }
         })
         .catch(err => {
-          console.warn("Webcam access unavailable:", err);
+          console.warn("Camera and Microphone access prompt denied or unavailable:", err);
         });
+    }
+  }, []);
+
+  // Handle Camera & Audio Stream
+  useEffect(() => {
+    if (viewMode === 'interview' && isCameraOn) {
+      if (!mediaStreamRef.current && navigator.mediaDevices?.getUserMedia) {
+        navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+          .then(stream => {
+            mediaStreamRef.current = stream;
+            if (videoRef.current) {
+              videoRef.current.srcObject = stream;
+            }
+          })
+          .catch(err => {
+            console.warn("Webcam & Mic access unavailable:", err);
+          });
+      } else if (videoRef.current && mediaStreamRef.current) {
+        videoRef.current.srcObject = mediaStreamRef.current;
+      }
     } else {
       if (mediaStreamRef.current) {
         mediaStreamRef.current.getTracks().forEach(track => track.stop());
@@ -190,9 +209,12 @@ export const AdaptiveInterview: React.FC<AdaptiveInterviewProps> = ({
         focus_skills: focusSkillsInput.split(',').map(s => s.trim())
       });
 
-      const qText = q.question_text || "Tell me about a time when you faced a disagreement with a teammate. How did you handle it, and what was the outcome?";
+      const qText = q?.question_text || "Tell me about a time when you faced a disagreement with a teammate. How did you handle it, and what was the outcome?";
       setCurrentQuestion(q);
-      setCurrentSeq(3);
+      if (q?.interview_id) {
+        setCurrentInterviewId(q.interview_id);
+      }
+      setCurrentSeq(q?.sequence_num || 1);
       setUserAnswer('');
 
       const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -200,20 +222,28 @@ export const AdaptiveInterview: React.FC<AdaptiveInterviewProps> = ({
         {
           sender: 'AI HR Interviewer',
           text: qText,
-          time: '10:24 AM'
-        },
-        {
-          sender: 'You',
-          text: 'In my last project, I disagreed with my teammate about the approach to build the feature. I suggested we go with a modular design...',
-          time: '10:26 AM'
+          time: nowStr
         }
       ]);
 
-      setAiNotesText("Analyzing your response...");
+      setAiNotesText("Analyzing your response structure and technical depth...");
       setViewMode('interview');
       speakQuestion(qText);
     } catch (err) {
       console.error("Failed to start interview:", err);
+      const defaultText = `Welcome! Let's start the ${interviewType} session for ${targetRole}. Could you introduce yourself and highlight your experience with ${focusSkillsInput}?`;
+      setCurrentQuestion({ question_id: 1, interview_id: 101, sequence_num: 1, question_text: defaultText });
+      setCurrentSeq(1);
+      setUserAnswer('');
+      setChatHistory([
+        {
+          sender: 'AI HR Interviewer',
+          text: defaultText,
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        }
+      ]);
+      setViewMode('interview');
+      speakQuestion(defaultText);
     } finally {
       setLoadingText(null);
     }
@@ -457,6 +487,22 @@ export const AdaptiveInterview: React.FC<AdaptiveInterviewProps> = ({
                   ))}
                 </div>
               </div>
+
+              <div className="space-y-1 md:col-span-2">
+                <label className="font-semibold text-[#0A192F] block">
+                  Job Description (RAG Knowledge Source)
+                </label>
+                <textarea
+                  rows={4}
+                  value={jobDescription}
+                  onChange={(e) => setJobDescription(e.target.value)}
+                  placeholder="Paste target job description requirements here (e.g. Python, FastAPI, PostgreSQL, Docker, Redis)..."
+                  className="w-full p-3 border border-[#E2E8F0] rounded-xl focus:outline-none focus:border-[#0A192F] bg-white text-xs font-mono"
+                />
+                <p className="text-[10px] text-[#64748B]">
+                  The AI Interviewer will chunk, vector-index, and retrieve context from this Job Description to ask grounded questions.
+                </p>
+              </div>
             </div>
 
             <div className="pt-4 flex justify-end">
@@ -482,308 +528,190 @@ export const AdaptiveInterview: React.FC<AdaptiveInterviewProps> = ({
         {/* ========================================================================= */}
         {/* VIEW 2: MOCKUP-PERFECT FULL SCREEN INTERVIEW LAYOUT (MATCHING MOCKUP) */}
         {/* ========================================================================= */}
+        {/* ========================================================================= */}
+        {/* VIEW 2: MOCKUP-PERFECT FULL SCREEN INTERVIEW LAYOUT (MATCHING MOCKUP) */}
+        {/* ========================================================================= */}
         {viewMode === 'interview' && currentQuestion && !loadingText && (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start w-full">
+          <div className="w-full max-w-6xl mx-auto space-y-6">
+            
+            {/* OUTER WHITE CARD CONTAINER FOR INTERVIEW SESSION */}
+            <div className="bg-white rounded-3xl border border-slate-200/90 p-6 md:p-8 shadow-sm space-y-6">
+              
+              {/* HEADER BAR INSIDE CARD */}
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div>
+                  <h2 className="text-base font-extrabold text-[#0A192F] tracking-tight">Mock Interview</h2>
+                  <p className="text-xs text-[#64748B] font-semibold">{targetRole}</p>
+                </div>
+                
+                <button
+                  onClick={async () => {
+                    const report = await api.getInterviewReport(currentInterviewId);
+                    setReportData(report);
+                    setViewMode('report');
+                  }}
+                  className="px-4 py-2 bg-[#D1FAE5] hover:bg-[#A7F3D0] text-[#059669] font-bold text-xs rounded-xl transition-colors shadow-sm"
+                >
+                  View Report
+                </button>
+              </div>
 
-            {/* LEFT MAIN COLUMN: VIDEO FRAME (TOP), CHAT STREAM (MIDDLE), ANSWER INPUT (BOTTOM) - 8 COLS */}
-            <div className="lg:col-span-8 space-y-6">
-
-              {/* 1. LARGE CENTRAL VIDEO CALL PANEL */}
-              <div className={`relative rounded-2xl overflow-hidden bg-slate-900 border border-slate-200 shadow-md transition-all ${
-                isFullscreen ? 'fixed inset-4 z-50 rounded-2xl' : 'h-[440px]'
-              }`}>
-                {/* AI HR Video Background Image */}
-                <img
-                  src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?q=80&w=1200&auto=format&fit=crop"
-                  alt="AI HR Interviewer"
-                  className="w-full h-full object-cover filter brightness-95"
-                />
-
-                {isCameraOn && (
-                  <video
-                    ref={videoRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    className="hidden"
-                  />
-                )}
-
-                {/* Top-Left Badge: AI HR Interviewer */}
-                <div className="absolute top-4 left-4 z-10">
-                  <div className="bg-slate-900/80 backdrop-blur-md text-white text-xs px-3.5 py-1.5 rounded-xl border border-slate-700/50 flex items-center space-x-2 font-medium shadow-lg">
-                    <Sparkles className="w-3.5 h-3.5 text-sky-400" />
-                    <span>AI HR Interviewer</span>
-                  </div>
+              {/* INNER VIDEO BOX CONTAINER */}
+              <div className="bg-[#FAFBFD] rounded-2xl border border-slate-200/80 p-6 space-y-6 shadow-inner">
+                
+                {/* QUESTION TEXT AT TOP OF VIDEO CONTAINER */}
+                <div className="text-sm md:text-base font-bold text-[#0A192F] leading-snug">
+                  Question {currentSeq}/{numQuestions} : {currentQuestion.question_text || "Hey! Misbah , Welcome to the Mock Interview, I am your interviewer today"}
                 </div>
 
-                {/* Top-Right Badge: CareerForge AI - Your AI HR Interviewer */}
-                <div className="absolute top-4 right-4 z-10">
-                  <div className="bg-slate-900/80 backdrop-blur-md text-white text-xs px-3.5 py-1.5 rounded-xl border border-slate-700/50 flex items-center space-x-2 font-medium shadow-lg">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                    <div>
-                      <div className="font-bold text-[11px] text-white">CareerForge AI</div>
-                      <div className="text-[9px] text-slate-300 font-mono">Your AI HR Interviewer</div>
+                {/* 2-TILE VIDEO GRID */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+                  
+                  {/* LEFT TILE: AI INTERVIEWER */}
+                  <div className="relative h-[320px] md:h-[360px] rounded-2xl bg-[#EFEFF4] border border-slate-200/60 flex items-center justify-center overflow-hidden shadow-inner">
+                    <div className="relative flex items-center justify-center">
+                      {/* Outer soft glowing aura */}
+                      <div className="absolute w-36 h-36 rounded-full bg-gradient-to-r from-blue-300 via-sky-200 to-indigo-300 blur-xl opacity-60 animate-pulse"></div>
+                      {/* Central S Avatar Circle */}
+                      <div className="relative w-24 h-24 rounded-full bg-gradient-to-tr from-sky-400 via-blue-500 to-sky-300 border-2 border-white/80 shadow-lg flex items-center justify-center">
+                        <span className="text-3xl font-extrabold text-white tracking-widest font-sans">S</span>
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                {/* Bottom-Left Video Controls Overlay */}
-                <div className="absolute bottom-4 left-4 z-10 flex items-center space-x-3">
-                  <button
-                    onClick={() => setIsMicOn(!isMicOn)}
-                    className={`p-3 rounded-full backdrop-blur-md transition-all ${
-                      isMicOn ? 'bg-slate-900/80 text-white hover:bg-slate-800' : 'bg-red-600/90 text-white'
-                    }`}
-                  >
-                    {isMicOn ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
-                  </button>
-
-                  <button
-                    onClick={() => setIsCameraOn(!isCameraOn)}
-                    className={`p-3 rounded-full backdrop-blur-md transition-all ${
-                      isCameraOn ? 'bg-slate-900/80 text-white hover:bg-slate-800' : 'bg-red-600/90 text-white'
-                    }`}
-                  >
-                    {isCameraOn ? <Video className="w-4 h-4" /> : <VideoOff className="w-4 h-4" />}
-                  </button>
-
-                  <button
-                    onClick={() => setShowOptionsModal(!showOptionsModal)}
-                    className="p-3 rounded-full bg-slate-900/80 hover:bg-slate-800 text-white backdrop-blur-md transition-all"
-                  >
-                    <MoreHorizontal className="w-4 h-4" />
-                  </button>
-                </div>
-
-                {/* Bottom-Right Fullscreen Control */}
-                <div className="absolute bottom-4 right-4 z-10">
-                  <button
-                    onClick={() => setIsFullscreen(!isFullscreen)}
-                    className="p-3 rounded-full bg-slate-900/80 hover:bg-slate-800 text-white backdrop-blur-md transition-all"
-                  >
-                    <Maximize2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-
-              {/* 2. CHAT / CONVERSATION STREAM BELOW VIDEO */}
-              <div className="space-y-4 pt-2">
-                {chatHistory.map((msg, idx) => (
-                  <div key={idx} className="space-y-1">
-                    {msg.sender === 'AI HR Interviewer' ? (
-                      <div className="flex items-start space-x-3">
-                        <div className="w-8 h-8 rounded-full bg-sky-600 text-white flex items-center justify-center flex-shrink-0 shadow-sm mt-0.5">
-                          <Sparkles className="w-4 h-4" />
-                        </div>
-                        <div className="space-y-1 max-w-2xl">
-                          <div className="flex items-center space-x-2 text-[11px] font-semibold text-[#64748B]">
-                            <span className="text-[#0A192F] font-bold">AI HR Interviewer</span>
-                            <span>{msg.time}</span>
-                          </div>
-                          <div className="p-4 bg-sky-50/70 border border-sky-100 rounded-2xl text-xs text-[#0A192F] font-medium leading-relaxed shadow-sm">
-                            {msg.text}
-                          </div>
-                        </div>
-                      </div>
+                  {/* RIGHT TILE: CANDIDATE VIDEO STREAM */}
+                  <div className="relative h-[320px] md:h-[360px] rounded-2xl bg-slate-900 border border-slate-200/60 overflow-hidden shadow-md flex items-center justify-center">
+                    {isCameraOn ? (
+                      <video
+                        ref={videoRef}
+                        autoPlay
+                        playsInline
+                        muted
+                        className="w-full h-full object-cover transform -scale-x-100"
+                      />
                     ) : (
-                      <div className="flex items-start justify-end space-x-3">
-                        <div className="space-y-1 max-w-2xl text-right">
-                          <div className="flex items-center justify-end space-x-2 text-[11px] font-semibold text-[#64748B]">
-                            <span>{msg.time}</span>
-                            <span className="text-[#0A192F] font-bold">You</span>
-                          </div>
-                          <div className="p-4 bg-slate-100 border border-slate-200/80 rounded-2xl text-xs text-[#0A192F] font-medium leading-relaxed text-left shadow-sm inline-block">
-                            {msg.text}
-                          </div>
+                      <div className="flex flex-col items-center justify-center space-y-3">
+                        <div className="w-20 h-20 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-white text-2xl font-bold">
+                          {store.goal.targetRole ? store.goal.targetRole[0] : 'U'}
                         </div>
-                        <div className="w-8 h-8 rounded-full bg-[#0A192F] text-white font-bold text-xs flex items-center justify-center flex-shrink-0 shadow-sm mt-0.5">
-                          A
-                        </div>
+                        <span className="text-xs text-slate-400 font-medium">Camera Paused</span>
                       </div>
                     )}
+
+                    {/* Candidate Name Pill Tag at Bottom-Left */}
+                    <div className="absolute bottom-4 left-4 z-10">
+                      <div className="bg-slate-900/60 backdrop-blur-md text-white text-xs px-3.5 py-1.5 rounded-full border border-white/10 font-semibold shadow-sm flex items-center space-x-1.5">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                        <span>{store.goal.targetRole ? "Misbah" : "Candidate"}</span>
+                      </div>
+                    </div>
                   </div>
-                ))}
-                <div ref={chatEndRef} />
+
+                </div>
+
+                {/* BOTTOM VIDEO CONTROLS BAR */}
+                <div className="flex items-center justify-between pt-2">
+                  {/* Far Left: Speaker Icon */}
+                  <button
+                    onClick={() => speakQuestion(currentQuestion?.question_text)}
+                    className="p-2.5 rounded-full hover:bg-slate-200/80 text-slate-600 transition-colors"
+                    title="Repeat AI Voice"
+                  >
+                    <Volume2 className="w-4.5 h-4.5" />
+                  </button>
+
+                  {/* Center: Mic / Red Call End / Video Controls */}
+                  <div className="flex items-center space-x-4">
+                    <button
+                      onClick={() => setIsMicOn(!isMicOn)}
+                      className={`p-3 rounded-full transition-all ${
+                        isMicOn ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-red-100 text-red-600'
+                      }`}
+                      title="Toggle Mic"
+                    >
+                      {isMicOn ? <Mic className="w-4.5 h-4.5" /> : <MicOff className="w-4.5 h-4.5" />}
+                    </button>
+
+                    <button
+                      onClick={() => setShowEndModal(true)}
+                      className="p-3.5 rounded-full bg-red-600 hover:bg-red-700 text-white transition-all shadow-md"
+                      title="End Interview"
+                    >
+                      <PhoneOff className="w-5 h-5" />
+                    </button>
+
+                    <button
+                      onClick={() => setIsCameraOn(!isCameraOn)}
+                      className={`p-3 rounded-full transition-all ${
+                        isCameraOn ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-red-100 text-red-600'
+                      }`}
+                      title="Toggle Video"
+                    >
+                      {isCameraOn ? <Video className="w-4.5 h-4.5" /> : <VideoOff className="w-4.5 h-4.5" />}
+                    </button>
+                  </div>
+
+                  {/* Far Right spacer */}
+                  <div className="w-8"></div>
+                </div>
+
               </div>
 
-              {/* 3. ANSWER INPUT BOX CONTAINER */}
-              <div className="bg-white rounded-2xl border border-[#E2E8F0] p-4 shadow-sm space-y-3">
-                <textarea
-                  rows={3}
-                  value={userAnswer}
-                  onChange={(e) => setUserAnswer(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSendAnswer())}
-                  placeholder="Type your answer here..."
-                  className="w-full text-xs text-[#0A192F] placeholder-[#94A3B8] focus:outline-none resize-none font-medium leading-relaxed"
-                />
-
-                <div className="flex items-center justify-between border-t border-slate-100 pt-3">
-                  <div className="flex items-center space-x-3 text-[#64748B]">
-                    <input
-                      type="file"
-                      ref={fileInputRef}
-                      onChange={handleFileUpload}
-                      className="hidden"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 transition-colors"
-                      title="Attach File"
-                    >
-                      <Paperclip className="w-4 h-4" />
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={toggleVoiceRecord}
-                      className={`p-2 rounded-lg transition-colors ${
-                        isMicOn ? 'bg-sky-50 text-sky-600' : 'hover:bg-slate-100 text-slate-500'
-                      }`}
-                      title="Voice Microphone Record"
-                    >
-                      <Mic className="w-4 h-4" />
-                    </button>
+              {/* BOTTOM DARK TRANSCRIPT BANNER & ANSWER INPUT */}
+              <div className="bg-[#333A42] text-white rounded-2xl p-4 shadow-lg space-y-3">
+                <div className="flex items-start space-x-3">
+                  {/* S Avatar Icon */}
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-r from-sky-400 to-blue-500 flex items-center justify-center font-bold text-white text-xs flex-shrink-0 shadow-sm mt-0.5">
+                    S
                   </div>
+
+                  <div className="flex-1 space-y-1 text-xs text-slate-200 leading-relaxed font-medium">
+                    <p className="text-white font-semibold">
+                      {chatHistory.length > 0 ? chatHistory[0].text : (currentQuestion.question_text || "Hey! Misbah , Welcome to the Mock Interview, I am your interviewer today")}
+                    </p>
+                    {chatHistory.length > 1 && (
+                      <p className="text-slate-300 font-normal border-t border-slate-600/60 pt-1 mt-1">
+                        <span className="font-semibold text-white">AI Interviewer: </span>
+                        {chatHistory[chatHistory.length - 1].text}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* CANDIDATE ANSWER INPUT BAR INTEGRATED INSIDE BANNER */}
+                <div className="flex items-center space-x-2 pt-1">
+                  <input
+                    type="text"
+                    value={userAnswer}
+                    onChange={(e) => setUserAnswer(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSendAnswer()}
+                    placeholder="Type your answer here..."
+                    className="flex-1 bg-[#252A30] text-xs text-white placeholder-slate-400 border border-slate-600/80 rounded-xl px-4 py-2.5 focus:outline-none focus:border-sky-400 font-medium"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={toggleVoiceRecord}
+                    className={`p-2.5 rounded-xl transition-colors ${
+                      isMicOn ? 'bg-sky-500 text-white' : 'bg-[#252A30] text-slate-300 hover:text-white border border-slate-600/80'
+                    }`}
+                    title="Voice Record"
+                  >
+                    <Mic className="w-4 h-4" />
+                  </button>
 
                   <button
                     onClick={handleSendAnswer}
                     disabled={!userAnswer.trim() || isEvaluating}
-                    className="px-6 py-2.5 bg-[#0A192F] hover:bg-[#112240] disabled:opacity-50 text-white font-bold text-xs rounded-xl transition-all flex items-center shadow-sm"
+                    className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition-all flex items-center shadow-sm"
                   >
-                    <span>Submit Answer</span>
-                    <Send className="w-3.5 h-3.5 ml-2 text-[#FFDE59]" />
+                    <span>Submit</span>
+                    <Send className="w-3.5 h-3.5 ml-1.5" />
                   </button>
                 </div>
               </div>
 
             </div>
-
-            {/* RIGHT SIDEBAR COLUMN: 5 CARDS (4 COLS) */}
-            <div className="lg:col-span-4 space-y-6">
-
-              {/* CARD 1: INTERVIEW PROGRESS */}
-              <div className="bg-white rounded-2xl border border-[#E2E8F0] p-5 shadow-sm space-y-4">
-                <div className="flex justify-between items-center text-xs font-bold text-[#0A192F]">
-                  <span>Interview Progress</span>
-                  <span className="text-[#64748B] font-mono">{currentSeq} of {numQuestions}</span>
-                </div>
-
-                <div className="w-full bg-[#E2E8F0] h-2 rounded-full overflow-hidden">
-                  <div
-                    className="bg-sky-500 h-full transition-all duration-300 rounded-full"
-                    style={{ width: `${(currentSeq / numQuestions) * 100}%` }}
-                  ></div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-2 pt-1 border-t border-[#E2E8F0] text-center text-xs">
-                  <div>
-                    <span className="text-[10px] text-[#64748B] font-semibold block">Role</span>
-                    <span className="font-bold text-[#0A192F] text-[11px] block truncate">{targetRole}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-[#64748B] font-semibold block">Type</span>
-                    <span className="font-bold text-[#0A192F] text-[11px] block truncate">{interviewType}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-[#64748B] font-semibold block">Difficulty</span>
-                    <span className="font-bold text-[#0A192F] text-[11px] block truncate">{difficulty}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* CARD 2: CURRENT QUESTION */}
-              <div className="bg-white rounded-2xl border border-[#E2E8F0] p-5 shadow-sm space-y-3">
-                <div
-                  onClick={() => setIsCurrentQuestionOpen(!isCurrentQuestionOpen)}
-                  className="flex justify-between items-center text-xs font-bold text-[#0A192F] cursor-pointer"
-                >
-                  <span className="flex items-center">
-                    <Sparkles className="w-4 h-4 text-sky-500 mr-2" /> Current Question
-                  </span>
-                  {isCurrentQuestionOpen ? <ChevronUp className="w-4 h-4 text-[#64748B]" /> : <ChevronDown className="w-4 h-4 text-[#64748B]" />}
-                </div>
-
-                {isCurrentQuestionOpen && (
-                  <div className="p-4 bg-sky-50/60 border border-sky-100/80 rounded-xl text-xs text-[#0A192F] font-medium leading-relaxed">
-                    "{currentQuestion.question_text}"
-                  </div>
-                )}
-              </div>
-
-              {/* CARD 3: INTERVIEW TIPS */}
-              <div className="bg-white rounded-2xl border border-[#E2E8F0] p-5 shadow-sm space-y-3">
-                <div className="flex items-center text-xs font-bold text-[#0A192F]">
-                  <Sparkles className="w-4 h-4 text-sky-500 mr-2" /> Interview Tips
-                </div>
-
-                <ul className="space-y-2.5 text-xs text-[#64748B] font-medium">
-                  <li className="flex items-start">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-sky-500 mr-2 flex-shrink-0 mt-0.5" />
-                    <span>Be specific with your examples (STAR method).</span>
-                  </li>
-                  <li className="flex items-start">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-sky-500 mr-2 flex-shrink-0 mt-0.5" />
-                    <span>Highlight your role and contribution.</span>
-                  </li>
-                  <li className="flex items-start">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-sky-500 mr-2 flex-shrink-0 mt-0.5" />
-                    <span>Show how you handled the situation.</span>
-                  </li>
-                  <li className="flex items-start">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-sky-500 mr-2 flex-shrink-0 mt-0.5" />
-                    <span>Focus on positive outcomes and learnings.</span>
-                  </li>
-                </ul>
-              </div>
-
-              {/* CARD 4: QUICK ACTIONS */}
-              <div className="bg-white rounded-2xl border border-[#E2E8F0] p-5 shadow-sm space-y-3">
-                <div className="text-xs font-bold text-[#0A192F]">Quick Actions</div>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    onClick={() => setShowEndModal(true)}
-                    className="py-2.5 px-4 border border-[#E2E8F0] hover:bg-slate-50 text-[#0A192F] font-semibold text-xs rounded-xl transition-colors"
-                  >
-                    End Interview
-                  </button>
-                  <button
-                    onClick={() => setShowProgressModal(true)}
-                    className="py-2.5 px-4 bg-sky-50 hover:bg-sky-100 text-sky-700 font-semibold text-xs rounded-xl transition-colors"
-                  >
-                    View Progress
-                  </button>
-                </div>
-              </div>
-
-              {/* CARD 5: AI HR NOTES */}
-              <div className="bg-white rounded-2xl border border-[#E2E8F0] p-5 shadow-sm space-y-3">
-                <div
-                  onClick={() => setIsAiNotesOpen(!isAiNotesOpen)}
-                  className="flex justify-between items-center text-xs font-bold text-[#0A192F] cursor-pointer"
-                >
-                  <span className="flex items-center">
-                    <ShieldCheck className="w-4 h-4 text-sky-500 mr-2" /> AI HR Notes
-                  </span>
-                  {isAiNotesOpen ? <ChevronUp className="w-4 h-4 text-[#64748B]" /> : <ChevronDown className="w-4 h-4 text-[#64748B]" />}
-                </div>
-
-                {isAiNotesOpen && (
-                  <div className="text-xs text-[#64748B] font-medium leading-relaxed space-y-2">
-                    <p>{aiNotesText}</p>
-                    {isEvaluating && (
-                      <div className="flex items-center space-x-1.5 text-sky-600 font-bold pt-1">
-                        <span className="w-2 h-2 rounded-full bg-sky-500 animate-ping"></span>
-                        <span>Evaluator Active...</span>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-            </div>
-
           </div>
         )}
 

@@ -17,32 +17,39 @@ class GeminiProvider(BaseAIProvider):
         self.api_key = api_key
 
     def generate_json(self, prompt: str, schema_class: Optional[Any] = None) -> Dict[str, Any]:
-        # Fallback to Mock if API call fails or key missing
-        try:
-            import requests
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.api_key}"
-            payload = {
-                "contents": [{"parts": [{"text": prompt + "\n\nReturn valid JSON only."}]}],
-                "generationConfig": {"responseMimeType": "application/json"}
-            }
-            resp = requests.post(url, json=payload, timeout=10)
-            if resp.status_code == 200:
-                result_text = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
-                return json.loads(result_text)
-        except Exception as e:
-            logger.warning(f"Gemini API call failed, falling back to Mock provider: {e}")
+        # Try gemini-2.5-flash first, then gemini-1.5-flash
+        for model in ["gemini-2.5-flash", "gemini-1.5-flash"]:
+            try:
+                import requests
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={self.api_key}"
+                payload = {
+                    "contents": [{"parts": [{"text": prompt + "\n\nReturn valid JSON only."}]}],
+                    "generationConfig": {"responseMimeType": "application/json"}
+                }
+                resp = requests.post(url, json=payload, timeout=10)
+                if resp.status_code == 200:
+                    result_text = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+                    clean_text = result_text.strip()
+                    if clean_text.startswith("```"):
+                        import re
+                        clean_text = re.sub(r"^```[a-zA-Z]*\n?", "", clean_text)
+                        clean_text = re.sub(r"\n?```$", "", clean_text).strip()
+                    return json.loads(clean_text)
+            except Exception as e:
+                logger.warning(f"Gemini model {model} failed: {e}")
         return MockAIProvider().generate_json(prompt, schema_class)
 
     def generate_text(self, prompt: str) -> str:
-        try:
-            import requests
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.api_key}"
-            payload = {"contents": [{"parts": [{"text": prompt}]}]}
-            resp = requests.post(url, json=payload, timeout=10)
-            if resp.status_code == 200:
-                return resp.json()["candidates"][0]["content"]["parts"][0]["text"]
-        except Exception as e:
-            logger.warning(f"Gemini text call failed: {e}")
+        for model in ["gemini-2.5-flash", "gemini-1.5-flash"]:
+            try:
+                import requests
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={self.api_key}"
+                payload = {"contents": [{"parts": [{"text": prompt}]}]}
+                resp = requests.post(url, json=payload, timeout=10)
+                if resp.status_code == 200:
+                    return resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+            except Exception as e:
+                logger.warning(f"Gemini text call failed for {model}: {e}")
         return MockAIProvider().generate_text(prompt)
 
 class MockAIProvider(BaseAIProvider):
