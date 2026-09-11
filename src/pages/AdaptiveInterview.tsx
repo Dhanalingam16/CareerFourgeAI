@@ -150,9 +150,26 @@ export const AdaptiveInterview: React.FC<AdaptiveInterviewProps> = ({
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 0.95;
+      utterance.rate = 0.92;
       utterance.pitch = 1.0;
-      window.speechSynthesis.speak(utterance);
+
+      const setVoiceAndSpeak = () => {
+        const voices = window.speechSynthesis.getVoices();
+        const preferredVoice = voices.find(
+          v => (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Samantha') || v.name.includes('Karen') || v.name.includes('Daniel') || v.name.includes('Alex')) && v.lang.startsWith('en')
+        ) || voices.find(v => v.lang.startsWith('en'));
+        if (preferredVoice) {
+          utterance.voice = preferredVoice;
+        }
+        window.speechSynthesis.speak(utterance);
+      };
+
+      if (window.speechSynthesis.getVoices().length > 0) {
+        setVoiceAndSpeak();
+      } else {
+        window.speechSynthesis.onvoiceschanged = setVoiceAndSpeak;
+        setVoiceAndSpeak();
+      }
     }
   };
 
@@ -160,7 +177,7 @@ export const AdaptiveInterview: React.FC<AdaptiveInterviewProps> = ({
   const toggleVoiceRecord = () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      alert("Speech recognition is not supported in this browser.");
+      alert("Speech recognition is not supported in this browser. Please use Chrome, Edge, or Safari.");
       return;
     }
 
@@ -177,21 +194,41 @@ export const AdaptiveInterview: React.FC<AdaptiveInterviewProps> = ({
       recognition.interimResults = true;
       recognition.lang = 'en-US';
 
+      recognition.onstart = () => {
+        setIsMicOn(true);
+      };
+
       recognition.onresult = (event: any) => {
-        let transcript = '';
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          transcript += event.results[i][0].transcript;
+        let fullTranscript = '';
+        for (let i = 0; i < event.results.length; i++) {
+          fullTranscript += event.results[i][0].transcript;
         }
-        if (transcript.trim()) {
-          setUserAnswer(transcript);
+        if (fullTranscript.trim()) {
+          setUserAnswer(fullTranscript);
         }
+      };
+
+      recognition.onerror = (event: any) => {
+        console.warn("Speech recognition error:", event.error);
+        if (event.error === 'not-allowed') {
+          alert("Microphone permission was denied. Please allow microphone access in your browser address bar.");
+        }
+        setIsMicOn(false);
+        recognitionRef.current = null;
+      };
+
+      recognition.onend = () => {
+        setIsMicOn(false);
+        recognitionRef.current = null;
       };
 
       recognition.start();
       recognitionRef.current = recognition;
       setIsMicOn(true);
     } catch (e) {
-      console.warn("Speech recognition error:", e);
+      console.warn("Failed to start speech recognition:", e);
+      setIsMicOn(false);
+      recognitionRef.current = null;
     }
   };
 
@@ -623,13 +660,13 @@ export const AdaptiveInterview: React.FC<AdaptiveInterviewProps> = ({
                   {/* Center: Mic / Red Call End / Video Controls */}
                   <div className="flex items-center space-x-4">
                     <button
-                      onClick={() => setIsMicOn(!isMicOn)}
+                      onClick={toggleVoiceRecord}
                       className={`p-3 rounded-full transition-all ${
-                        isMicOn ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-red-100 text-red-600'
+                        isMicOn ? 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-md' : 'bg-red-100 text-red-600'
                       }`}
-                      title="Toggle Mic"
+                      title={isMicOn ? "Microphone Recording Active (Click to Stop)" : "Click to Enable Mic & Voice Input"}
                     >
-                      {isMicOn ? <Mic className="w-4.5 h-4.5" /> : <MicOff className="w-4.5 h-4.5" />}
+                      {isMicOn ? <Mic className="w-4.5 h-4.5 animate-pulse" /> : <MicOff className="w-4.5 h-4.5" />}
                     </button>
 
                     <button
