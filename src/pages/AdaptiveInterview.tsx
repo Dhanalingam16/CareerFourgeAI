@@ -57,6 +57,7 @@ export const AdaptiveInterview: React.FC<AdaptiveInterviewProps> = ({
   const [chatHistory, setChatHistory] = useState<Array<{ sender: string; text: string; time: string }>>([]);
   const [aiNotesText, setAiNotesText] = useState<string>("Analyzing your response...");
   const [isEvaluating, setIsEvaluating] = useState(false);
+  const [isAiSpeaking, setIsAiSpeaking] = useState(false);
 
   // --- REPORT & HISTORY STATE ---
   const [reportData, setReportData] = useState<any>(null);
@@ -152,6 +153,19 @@ export const AdaptiveInterview: React.FC<AdaptiveInterviewProps> = ({
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.rate = 0.92;
       utterance.pitch = 1.0;
+
+      utterance.onstart = () => {
+        setIsAiSpeaking(true);
+      };
+
+      utterance.onend = () => {
+        setIsAiSpeaking(false);
+      };
+
+      utterance.onerror = (e) => {
+        console.warn("Speech synthesis error:", e);
+        setIsAiSpeaking(false);
+      };
 
       const setVoiceAndSpeak = () => {
         const voices = window.speechSynthesis.getVoices();
@@ -605,19 +619,58 @@ export const AdaptiveInterview: React.FC<AdaptiveInterviewProps> = ({
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
                   
                   {/* LEFT TILE: AI INTERVIEWER */}
-                  <div className="relative h-[320px] md:h-[360px] rounded-2xl bg-[#EFEFF4] border border-slate-200/60 flex items-center justify-center overflow-hidden shadow-inner">
-                    <div className="relative flex items-center justify-center">
-                      {/* Outer soft glowing aura */}
-                      <div className="absolute w-36 h-36 rounded-full bg-gradient-to-r from-blue-300 via-sky-200 to-indigo-300 blur-xl opacity-60 animate-pulse"></div>
-                      {/* Central S Avatar Circle */}
-                      <div className="relative w-24 h-24 rounded-full bg-gradient-to-tr from-sky-400 via-blue-500 to-sky-300 border-2 border-white/80 shadow-lg flex items-center justify-center">
+                  <div className={`relative h-[320px] md:h-[360px] rounded-2xl transition-all duration-500 border flex items-center justify-center overflow-hidden shadow-inner ${
+                    isAiSpeaking ? 'bg-gradient-to-b from-sky-50 via-blue-50 to-indigo-100/60 border-sky-300 shadow-sky-100' : 'bg-[#EFEFF4] border-slate-200/60'
+                  }`}>
+                    <div className="relative flex flex-col items-center justify-center space-y-4">
+                      {/* Expanding Animated Ripple Soundwave Rings when AI is Speaking */}
+                      {isAiSpeaking && (
+                        <>
+                          <div className="absolute w-52 h-52 rounded-full border border-sky-400/40 animate-ping opacity-75"></div>
+                          <div className="absolute w-44 h-44 rounded-full border-2 border-blue-400/50 animate-pulse opacity-80"></div>
+                          <div className="absolute w-36 h-36 rounded-full bg-gradient-to-r from-blue-400 via-sky-300 to-indigo-400 blur-xl opacity-70 animate-pulse"></div>
+                        </>
+                      )}
+                      {!isAiSpeaking && (
+                        <div className="absolute w-36 h-36 rounded-full bg-gradient-to-r from-blue-300 via-sky-200 to-indigo-300 blur-xl opacity-50"></div>
+                      )}
+
+                      {/* Central S Avatar Circle matching screenshot */}
+                      <div className={`relative w-24 h-24 rounded-full bg-gradient-to-tr from-sky-400 via-blue-500 to-sky-300 border-2 border-white shadow-xl flex items-center justify-center transition-transform duration-300 ${
+                        isAiSpeaking ? 'scale-110 shadow-sky-300/80 ring-4 ring-sky-400/30' : ''
+                      }`}>
                         <span className="text-3xl font-extrabold text-white tracking-widest font-sans">S</span>
+                      </div>
+
+                      {/* Animated Equalizer Waveform Bars when AI is Speaking */}
+                      {isAiSpeaking ? (
+                        <div className="flex items-center space-x-1.5 pt-2 z-10">
+                          <span className="w-1.5 h-6 bg-sky-500 rounded-full animate-[bounce_0.6s_infinite_100ms]"></span>
+                          <span className="w-1.5 h-8 bg-blue-600 rounded-full animate-[bounce_0.6s_infinite_200ms]"></span>
+                          <span className="w-1.5 h-10 bg-indigo-500 rounded-full animate-[bounce_0.6s_infinite_300ms]"></span>
+                          <span className="w-1.5 h-7 bg-sky-400 rounded-full animate-[bounce_0.6s_infinite_150ms]"></span>
+                          <span className="w-1.5 h-5 bg-blue-500 rounded-full animate-[bounce_0.6s_infinite_250ms]"></span>
+                        </div>
+                      ) : (
+                        <div className="h-5"></div>
+                      )}
+
+                      {/* AI Status Badge */}
+                      <div className="z-10">
+                        <div className={`text-xs px-3.5 py-1.5 rounded-full border font-semibold shadow-sm flex items-center space-x-2 transition-all ${
+                          isAiSpeaking ? 'bg-sky-600 text-white border-sky-400 animate-pulse' : 'bg-slate-900/60 backdrop-blur-md text-white border-white/10'
+                        }`}>
+                          <span className={`w-2 h-2 rounded-full ${isAiSpeaking ? 'bg-white animate-ping' : 'bg-sky-400'}`}></span>
+                          <span>{isAiSpeaking ? "AI Interviewer Speaking..." : (isEvaluating ? "Analyzing Response..." : "AI Interviewer")}</span>
+                        </div>
                       </div>
                     </div>
                   </div>
 
                   {/* RIGHT TILE: CANDIDATE VIDEO STREAM */}
-                  <div className="relative h-[320px] md:h-[360px] rounded-2xl bg-slate-900 border border-slate-200/60 overflow-hidden shadow-md flex items-center justify-center">
+                  <div className={`relative h-[320px] md:h-[360px] rounded-2xl bg-slate-900 overflow-hidden shadow-md flex items-center justify-center border-2 transition-all duration-300 ${
+                    isMicOn ? 'border-emerald-500 ring-4 ring-emerald-500/20 shadow-emerald-900/40' : 'border-slate-200/60'
+                  }`}>
                     {isCameraOn ? (
                       <video
                         ref={videoRef}
@@ -637,9 +690,11 @@ export const AdaptiveInterview: React.FC<AdaptiveInterviewProps> = ({
 
                     {/* Candidate Name Pill Tag at Bottom-Left */}
                     <div className="absolute bottom-4 left-4 z-10">
-                      <div className="bg-slate-900/60 backdrop-blur-md text-white text-xs px-3.5 py-1.5 rounded-full border border-white/10 font-semibold shadow-sm flex items-center space-x-1.5">
-                        <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-                        <span>{store.goal.targetRole ? "Misbah" : "Candidate"}</span>
+                      <div className={`text-xs px-3.5 py-1.5 rounded-full border font-semibold shadow-sm flex items-center space-x-1.5 backdrop-blur-md transition-all ${
+                        isMicOn ? 'bg-emerald-600 text-white border-emerald-400' : 'bg-slate-900/60 text-white border-white/10'
+                      }`}>
+                        <span className={`w-2 h-2 rounded-full ${isMicOn ? 'bg-white animate-pulse' : 'bg-emerald-400'}`}></span>
+                        <span>{store.goal.targetRole ? "Misbah" : "Candidate"} {isMicOn ? "(Speaking...)" : ""}</span>
                       </div>
                     </div>
                   </div>
