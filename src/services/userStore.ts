@@ -5,8 +5,12 @@ import {
   ATSAnalysisResult,
   ReadinessScore,
   RoadmapTask,
-  SkillGapItem
+  SkillGapItem,
+  PracticeRecord,
+  PracticeStats,
+  AtsAnalysisResponse
 } from '../types';
+import { api } from './api';
 
 export interface AssessmentAttempt {
   id: string;
@@ -40,6 +44,7 @@ export interface UserStoreData {
   skillGaps: SkillGapItem[];
   roadmap: RoadmapTask[];
   assessmentAttempts: AssessmentAttempt[];
+  practiceHistory: PracticeRecord[];
   nextBestAction: {
     title: string;
     category: string;
@@ -157,6 +162,7 @@ const INITIAL_STORE_DATA: UserStoreData = {
   ],
 
   assessmentAttempts: [],
+  practiceHistory: [],
 
   nextBestAction: {
     title: 'Complete Binary Search Assessment',
@@ -171,21 +177,29 @@ const INITIAL_STORE_DATA: UserStoreData = {
 class UserStore {
   private data: UserStoreData;
   private listeners: (() => void)[] = [];
+  private currentUserKey: string = 'alex.mercer@demo.com';
 
   constructor() {
-    const saved = localStorage.getItem('careerforge_user_store');
+    const activeUser = localStorage.getItem('careerforge_active_user') || 'alex.mercer@demo.com';
+    this.currentUserKey = activeUser;
+    const saved = localStorage.getItem(`careerforge_user_store_${activeUser}`) || localStorage.getItem('careerforge_user_store');
     if (saved) {
       try {
-        this.data = JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (!parsed.practiceHistory) parsed.practiceHistory = [];
+        this.data = { ...INITIAL_STORE_DATA, ...parsed };
       } catch {
-        this.data = { ...INITIAL_STORE_DATA };
+        this.data = { ...INITIAL_STORE_DATA, practiceHistory: [] };
       }
     } else {
-      this.data = { ...INITIAL_STORE_DATA };
+      this.data = { ...INITIAL_STORE_DATA, practiceHistory: [] };
     }
   }
 
   private save() {
+    const userEmail = (this.currentUserKey || 'alex.mercer@demo.com').toLowerCase();
+    localStorage.setItem('careerforge_active_user', userEmail);
+    localStorage.setItem(`careerforge_user_store_${userEmail}`, JSON.stringify(this.data));
     localStorage.setItem('careerforge_user_store', JSON.stringify(this.data));
     this.listeners.forEach(l => l());
   }
@@ -201,12 +215,33 @@ class UserStore {
     return this.data;
   }
 
+  getCurrentUserEmail(): string {
+    return this.currentUserKey || this.data.profile.email || (typeof localStorage !== 'undefined' ? localStorage.getItem('careerforge_active_user') || 'alex.mercer@demo.com' : 'alex.mercer@demo.com');
+  }
+
   // --- ACTIONS ---
 
   login(name: string, email: string) {
-    this.data.isAuthenticated = true;
+    const cleanEmail = (email || 'alex.mercer@demo.com').toLowerCase();
+    this.currentUserKey = cleanEmail;
+    localStorage.setItem('careerforge_active_user', cleanEmail);
+
+    const userStoreKey = `careerforge_user_store_${cleanEmail}`;
+    const saved = localStorage.getItem(userStoreKey);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (!parsed.practiceHistory) parsed.practiceHistory = [];
+        this.data = { ...INITIAL_STORE_DATA, ...parsed, isAuthenticated: true };
+      } catch {
+        this.data = { ...INITIAL_STORE_DATA, isAuthenticated: true };
+      }
+    } else {
+      this.data = { ...INITIAL_STORE_DATA, isAuthenticated: true };
+    }
+
     this.data.profile.fullName = name || this.data.profile.fullName;
-    // Check if onboarding complete
+    this.data.profile.email = cleanEmail;
     if (this.data.onboardingCompleted && this.data.baselineCompleted) {
       this.recalculateAll();
     }
@@ -214,17 +249,110 @@ class UserStore {
   }
 
   signup(name: string, email: string) {
-    this.data.isAuthenticated = true;
-    this.data.onboardingCompleted = false;
-    this.data.resumeAnalyzed = false;
-    this.data.baselineCompleted = false;
-    this.data.profile.fullName = name || 'New Candidate';
+    const cleanEmail = (email || 'new.user@careerforge.ai').toLowerCase();
+    this.currentUserKey = cleanEmail;
+    localStorage.setItem('careerforge_active_user', cleanEmail);
+
+    this.data = {
+      ...INITIAL_STORE_DATA,
+      isAuthenticated: true,
+      onboardingCompleted: false,
+      resumeAnalyzed: false,
+      baselineCompleted: false,
+      practiceHistory: [],
+      profile: {
+        ...INITIAL_STORE_DATA.profile,
+        fullName: name || 'New Candidate',
+        email: cleanEmail
+      }
+    };
     this.save();
   }
 
   logout() {
     this.data.isAuthenticated = false;
     this.save();
+  }
+
+  // --- PRACTICE COMPLETION & SYNC ---
+  savePracticeRecord(record: PracticeRecord) {
+    if (!this.data.practiceHistory) {
+      this.data.practiceHistory = [];
+    }
+
+    // Prepend record so recent practice is at the top
+    this.data.practiceHistory = [record, ...this.data.practiceHistory];
+
+    // Log as completed assessment attempt for job readiness calculation
+    const categoryMap: Record<string, 'DSA' | 'Technical' | 'System Design' | 'Behavioral'> = {
+      'aptitude': 'Technical',
+      'coding': 'DSA',
+      'sql': 'Technical',
+      'ai-interview': 'Behavioral'
+    };
+
+    const attemptCategory = categoryMap[record.practiceType] || 'Technical';
+    this.data.assessmentAttempts.unshift({
+      id: record.sessionId || record.id,
+      title: record.title || `${record.practiceType.toUpperCase()} Practice`,
+      category: attemptCategory,
+      score: record.score,
+      completedAt: new Date().toLocaleDateString()
+    });
+
+    // Reactively increment verified category scores
+    if (record.practiceType === 'coding') {
+      const old = this.data.categoryScores.dsa;
+      this.data.categoryScores.dsa = Math.min(Math.round((old + record.score) / 2 + 5), 98);
+    } else if (record.practiceType === 'aptitude' || record.practiceType === 'sql') {
+      const old = this.data.categoryScores.technical;
+      this.data.categoryScores.technical = Math.min(Math.round((old + record.score) / 2 + 5), 98);
+    } else if (record.practiceType === 'ai-interview') {
+      const old = this.data.categoryScores.interview;
+      this.data.categoryScores.interview = Math.min(Math.round((old + record.score) / 2 + 5), 98);
+    }
+
+    this.recalculateAll();
+    this.save();
+
+    // Submit to backend asynchronously
+    try {
+      api.submitPracticeCompletion(record).catch(err => {
+        console.warn('[UserStore] Backend practice sync notice:', err);
+      });
+    } catch {
+      // Non-blocking
+    }
+  }
+
+  getPracticeStats(): PracticeStats {
+    const history = this.data.practiceHistory || [];
+    const totalSessions = history.length;
+    const completedSessions = history.filter(h => h.status === 'Completed').length;
+    const scores = history.map(h => h.score);
+    const latestScore = scores.length > 0 ? scores[0] : 0;
+    const averageScore = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
+    const accuracies = history.map(h => h.accuracy);
+    const overallAccuracy = accuracies.length > 0 ? Math.round(accuracies.reduce((a, b) => a + b, 0) / accuracies.length) : 0;
+    const questionsPracticed = history.reduce((sum, h) => sum + (h.questionsAttempted || 0), 0);
+    const latestPracticeType = history.length > 0 ? history[0].practiceType : '';
+    const lastPracticeDate = history.length > 0 ? history[0].completedAt : '';
+
+    return {
+      totalSessions,
+      completedSessions,
+      latestScore,
+      averageScore,
+      overallAccuracy,
+      questionsPracticed,
+      latestPracticeType,
+      lastPracticeDate,
+      recentActivity: history.slice(0, 5)
+    };
+  }
+
+  getPracticeHistory(): PracticeRecord[] {
+    return this.data.practiceHistory || [];
   }
 
   saveOnboarding(profile: UserProfileData, goal: CareerGoalData, skills: ClaimedSkillItem[], resumeFile: string | null) {
@@ -253,6 +381,26 @@ class UserStore {
 
     this.data.atsResult.atsScore = Math.min(Math.max(base, 60), 92);
     this.data.resumeAnalyzed = true;
+  }
+
+  saveAtsAnalysis(result: AtsAnalysisResponse) {
+    this.data.atsResult = {
+      atsScore: result.overall_score,
+      whatsWorking: result.strengths || [],
+      whatsMissing: result.weaknesses || [],
+      targetRoleMatches: (result.keyword_analysis?.matched_keywords || []).map(k => ({
+        skill: k,
+        status: 'Strong'
+      })),
+      calculationReasoning: result.summary,
+      fullAnalysis: result
+    };
+    if (result.filename) {
+      this.data.resumeFileName = result.filename;
+    }
+    this.data.resumeAnalyzed = true;
+    this.recalculateAll();
+    this.save();
   }
 
   submitBaselineAssessment(answers: Record<string, string>) {

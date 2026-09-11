@@ -1,9 +1,11 @@
 import React from 'react';
 import {
   Pencil, FileText, Code2, Server, Mic, Brain, Sparkles, Zap, BarChart3,
-  ChevronRight, ArrowRight, AlertTriangle, CheckCircle2, Target
+  ChevronRight, ArrowRight, AlertTriangle, CheckCircle2, Target,
+  Award, Layers, Clock, Code, Database, BookOpen, ArrowUpRight
 } from 'lucide-react';
 import { useUserStore } from '../hooks/useUserStore';
+import { userStore } from '../services/userStore';
 
 interface CandidateDashboardProps {
   onNavigate: (tab: string, targetId?: string) => void;
@@ -11,11 +13,60 @@ interface CandidateDashboardProps {
 
 export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onNavigate }) => {
   const store = useUserStore();
+  const stats = userStore.getPracticeStats();
 
   const readiness = store.readinessScore || 69;
   const prevReadiness = store.previousReadinessScore || 68;
   const scoreDiff = Math.max(readiness - prevReadiness, 1);
   const firstName = store.profile.fullName ? store.profile.fullName.split(' ')[0] : 'Alex';
+
+  const formatDate = (isoStr: string) => {
+    if (!isoStr) return '';
+    try {
+      const d = new Date(isoStr);
+      return d.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch {
+      return isoStr;
+    }
+  };
+
+  const getModuleBadge = (type: string) => {
+    switch (type) {
+      case 'coding':
+        return (
+          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <Code className="w-3 h-3" />
+            <span>Coding</span>
+          </span>
+        );
+      case 'sql':
+        return (
+          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-cyan-50 text-cyan-700 border border-cyan-200">
+            <Database className="w-3 h-3" />
+            <span>SQL</span>
+          </span>
+        );
+      case 'ai-interview':
+        return (
+          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+            <Mic className="w-3 h-3" />
+            <span>AI Interview</span>
+          </span>
+        );
+      default:
+        return (
+          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+            <BookOpen className="w-3 h-3" />
+            <span>Aptitude</span>
+          </span>
+        );
+    }
+  };
 
   // SVG Circular Gauge calculation for 69%
   const radius = 38;
@@ -141,6 +192,170 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ onNaviga
 
         </div>
 
+      </div>
+
+      {/* PRACTICE PERFORMANCE & RECENT ACTIVITY SECTION */}
+      <div className="bg-white rounded-2xl border border-[#E2E8F0] p-6 shadow-sm space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-4">
+          <div className="flex items-center space-x-2.5">
+            <div className="w-8 h-8 rounded-lg bg-cyan-50 text-cyan-700 flex items-center justify-center">
+              <BarChart3 className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center space-x-2">
+                <h2 className="text-sm font-extrabold text-[#0F172A] tracking-tight uppercase font-mono">
+                  Practice Performance
+                </h2>
+                <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span>Live Tracking</span>
+                </span>
+              </div>
+              <p className="text-xs text-[#64748B] mt-0.5">
+                Automatically updated from your Aptitude, Coding, SQL, and AI Interview practice sessions.
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={() => onNavigate('profile')}
+            className="text-xs font-bold text-[#0284C7] hover:text-blue-700 transition-colors flex items-center self-start sm:self-auto"
+          >
+            <span>View Full History in Profile</span>
+            <ArrowRight className="w-3.5 h-3.5 ml-1" />
+          </button>
+        </div>
+
+        {/* 4 Practice Stats Cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80">
+            <div className="flex items-center justify-between text-slate-500 text-[10px] font-mono font-bold uppercase">
+              <span>Completed</span>
+              <CheckCircle2 className="w-3.5 h-3.5 text-blue-600" />
+            </div>
+            <div className="mt-2 text-2xl font-black text-[#0F172A]">
+              {stats.completedSessions}
+            </div>
+            <div className="text-[11px] text-slate-500 font-medium mt-0.5">
+              {stats.totalSessions} sessions logged
+            </div>
+          </div>
+
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80">
+            <div className="flex items-center justify-between text-slate-500 text-[10px] font-mono font-bold uppercase">
+              <span>Avg Score</span>
+              <Award className="w-3.5 h-3.5 text-emerald-600" />
+            </div>
+            <div className="mt-2 text-2xl font-black text-emerald-600">
+              {stats.averageScore}%
+            </div>
+            <div className="text-[11px] text-slate-500 font-medium mt-0.5">
+              Latest: {stats.latestScore > 0 ? `${stats.latestScore}%` : 'N/A'}
+            </div>
+          </div>
+
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80">
+            <div className="flex items-center justify-between text-slate-500 text-[10px] font-mono font-bold uppercase">
+              <span>Accuracy</span>
+              <Target className="w-3.5 h-3.5 text-cyan-600" />
+            </div>
+            <div className="mt-2 text-2xl font-black text-cyan-700">
+              {stats.overallAccuracy}%
+            </div>
+            <div className="text-[11px] text-slate-500 font-medium mt-0.5">
+              Across all tests
+            </div>
+          </div>
+
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80">
+            <div className="flex items-center justify-between text-slate-500 text-[10px] font-mono font-bold uppercase">
+              <span>Questions</span>
+              <Layers className="w-3.5 h-3.5 text-purple-600" />
+            </div>
+            <div className="mt-2 text-2xl font-black text-purple-700">
+              {stats.questionsPracticed}
+            </div>
+            <div className="text-[11px] text-slate-500 font-medium mt-0.5 truncate">
+              {stats.lastPracticeDate ? `Last: ${formatDate(stats.lastPracticeDate)}` : 'Ready to start'}
+            </div>
+          </div>
+        </div>
+
+        {/* Recent Activity Stream */}
+        <div className="space-y-3 pt-1">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-700 uppercase font-mono tracking-wider">
+              Recent Practice Activity
+            </span>
+            <span className="text-[11px] text-slate-400">
+              {stats.recentActivity.length} recent sessions
+            </span>
+          </div>
+
+          {stats.recentActivity.length === 0 ? (
+            <div className="p-6 text-center rounded-xl border border-dashed border-slate-200 bg-slate-50/50 space-y-2">
+              <p className="text-xs text-slate-500">
+                No practice sessions recorded yet. Start practicing to see real evaluated results and accuracy here!
+              </p>
+              <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+                <button
+                  onClick={() => onNavigate('aptitude')}
+                  className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-blue-700 text-xs font-bold transition-colors"
+                >
+                  Aptitude Practice
+                </button>
+                <button
+                  onClick={() => onNavigate('coding')}
+                  className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-emerald-700 text-xs font-bold transition-colors"
+                >
+                  Coding Practice
+                </button>
+                <button
+                  onClick={() => onNavigate('sql')}
+                  className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-cyan-700 text-xs font-bold transition-colors"
+                >
+                  SQL Practice
+                </button>
+                <button
+                  onClick={() => onNavigate('interview')}
+                  className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-purple-700 text-xs font-bold transition-colors"
+                >
+                  AI Interview
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden text-xs">
+              {stats.recentActivity.slice(0, 3).map((item) => (
+                <div
+                  key={item.id}
+                  onClick={() => onNavigate('profile')}
+                  className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50 transition-colors cursor-pointer group"
+                >
+                  <div className="flex items-center space-x-3 min-w-0">
+                    {getModuleBadge(item.practiceType)}
+                    <div className="min-w-0">
+                      <span className="font-bold text-[#0F172A] group-hover:text-blue-600 transition-colors block truncate">
+                        {item.title}
+                      </span>
+                      <span className="text-[11px] text-slate-400 font-mono">
+                        {formatDate(item.completedAt)} • {item.difficulty} Tier
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-4 self-end sm:self-auto font-mono text-[11px]">
+                    <div className="text-right">
+                      <span className="font-bold text-[#0F172A] block">{item.score}% Score</span>
+                      <span className="text-emerald-600 text-[10px] font-semibold">{item.accuracy}% Accuracy</span>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-blue-600 transition-colors" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ROW 2: TWO FEATURED MODULES (AI HR INTERVIEW & CAREER INTELLIGENCE) */}

@@ -19,16 +19,61 @@ import { ProjectDeepDive } from './pages/ProjectDeepDive';
 import { CodingWorkspace } from './pages/CodingWorkspace';
 import { AptitudeWorkspace } from './pages/AptitudeWorkspace';
 import { SQLWorkspace } from './pages/SQLWorkspace';
+import { AptitudeConfigPage } from './pages/AptitudeConfigPage';
+import { CodingConfigPage } from './pages/CodingConfigPage';
+import { SQLConfigPage } from './pages/SQLConfigPage';
+import { AptitudePracticeSession } from './pages/AptitudePracticeSession';
+import { CodingPracticeSession } from './pages/CodingPracticeSession';
+import { SQLPracticeSession } from './pages/SQLPracticeSession';
 import { JobReadinessDashboard } from './pages/JobReadinessDashboard';
 import { PersonalizedRoadmapPage } from './pages/PersonalizedRoadmap';
 import { ReassessmentSimulator } from './pages/ReassessmentSimulator';
+import { ProfilePage } from './pages/ProfilePage';
 import { userStore } from './services/userStore';
 import { JobDetails, SkillTruthResponse, JobGapResponse, ReadinessScore, PersonalizedRoadmap, UserProfileData, CareerGoalData, ClaimedSkillItem } from './types';
 
 export function App() {
+  // Check if current URL is a standalone practice session opened in a new tab
+  const getPracticeRoute = () => {
+    if (typeof window === 'undefined') return null;
+    const path = window.location.pathname;
+    if (!path.startsWith('/practice/')) return null;
+    const parts = path.split('/').filter(Boolean); // ['practice', 'aptitude', 'session', 'id'] or ['practice', 'aptitude', 'id']
+    const practiceType = parts[1]; // 'aptitude' | 'coding' | 'sql' | 'ai-interview'
+    const sessionId = parts[parts.length - 1];
+    return { practiceType, sessionId };
+  };
+
+  const practiceRoute = getPracticeRoute();
+  if (practiceRoute) {
+    if (practiceRoute.practiceType === 'aptitude') {
+      return <AptitudePracticeSession sessionId={practiceRoute.sessionId} />;
+    }
+    if (practiceRoute.practiceType === 'coding') {
+      return <CodingPracticeSession sessionId={practiceRoute.sessionId} />;
+    }
+    if (practiceRoute.practiceType === 'sql') {
+      return <SQLPracticeSession sessionId={practiceRoute.sessionId} />;
+    }
+    if (practiceRoute.practiceType === 'ai-interview') {
+      return <AdaptiveInterview isStandalone={true} sessionId={practiceRoute.sessionId} />;
+    }
+  }
+
   const [currentTab, setCurrentTab] = useState<string>('landing');
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [selectedAssessmentId, setSelectedAssessmentId] = useState<string>('binary-search');
+
+  // Sync tab with URL search parameter if present (e.g. /dashboard?tab=profile)
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const requestedTab = params.get('tab');
+      if (requestedTab) {
+        setCurrentTab(requestedTab);
+      }
+    }
+  }, []);
 
   // App State Data
   const [jobData, setJobData] = useState<JobDetails | null>(null);
@@ -42,7 +87,7 @@ export function App() {
     const protectedTabs = [
       'dashboard', 'baseline', 'assessment-player', 'job', 'resume', 
       'truth', 'gap', 'interview', 'project', 'coding', 'aptitude', 'sql', 
-      'readiness', 'roadmap', 'reassessment'
+      'readiness', 'roadmap', 'reassessment', 'profile'
     ];
 
     if (!isAuthenticated && protectedTabs.includes(tab)) {
@@ -224,15 +269,15 @@ export function App() {
           )}
 
           {currentTab === 'aptitude' && (
-            <AptitudeWorkspace onNavigateToCoding={() => handleNavigate('coding')} />
+            <AptitudeConfigPage />
           )}
 
           {currentTab === 'coding' && (
-            <CodingWorkspace onProceedToSQL={() => handleNavigate('sql')} />
+            <CodingConfigPage />
           )}
 
           {currentTab === 'sql' && (
-            <SQLWorkspace onProceedToReadiness={() => handleNavigate('readiness')} />
+            <SQLConfigPage />
           )}
 
           {currentTab === 'readiness' && (
@@ -253,6 +298,10 @@ export function App() {
             <ReassessmentSimulator
               onBackToDashboard={() => handleNavigate('dashboard')}
             />
+          )}
+
+          {currentTab === 'profile' && (
+            <ProfilePage onNavigate={handleNavigate} />
           )}
         </main>
       </div>

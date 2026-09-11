@@ -167,11 +167,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onNavigate }) => {
           </span>
 
           <button
-            onClick={() => onNavigate('dashboard')}
+            onClick={() => onNavigate('profile')}
             className={getNavClass('profile')}
           >
             <div className="flex items-center space-x-2.5">
-              <User className="w-4 h-4 text-[#64748B]" />
+              <User className={`w-4 h-4 ${currentTab === 'profile' ? 'text-[#0284C7]' : 'text-[#64748B]'}`} />
               <span>Profile</span>
             </div>
           </button>
@@ -191,7 +191,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onNavigate }) => {
 
       {/* BOTTOM USER PROFILE CARD */}
       <div className="p-3 border-t border-[#E2E8F0] bg-white">
-        <div className="flex items-center justify-between p-2 rounded-lg hover:bg-[#F8FAFC] cursor-pointer transition-colors">
+        <div 
+          onClick={() => onNavigate('profile')}
+          className="flex items-center justify-between p-2 rounded-lg hover:bg-[#F8FAFC] cursor-pointer transition-colors"
+        >
           <div className="flex items-center space-x-2.5 overflow-hidden">
             <div className="w-8 h-8 rounded-full bg-[#0A192F] text-white flex items-center justify-center font-bold text-xs shrink-0">
               {userInitials}

@@ -3,9 +3,11 @@ import {
   Play, Send, RotateCcw, Clock, ArrowRight, CheckCircle2, AlertCircle,
   Code, FileText, Lightbulb, History, Copy, ChevronRight, Terminal, BookOpen
 } from 'lucide-react';
-import { CodingEvaluation } from '../types';
+import { CodingEvaluation, PracticeRecord } from '../types';
 import { api } from '../services/api';
 import { userStore } from '../services/userStore';
+import { EndPracticeModal } from '../components/EndPracticeModal';
+import { PracticeCompletionSuccess } from '../components/PracticeCompletionSuccess';
 
 interface CodingWorkspaceProps {
   onProceedToSQL: () => void;
@@ -158,14 +160,21 @@ export const CodingWorkspace: React.FC<CodingWorkspaceProps> = ({ onProceedToSQL
   const [activeLeftTab, setActiveLeftTab] = useState<'description' | 'editorial' | 'submissions'>('description');
   const [activeConsoleTab, setActiveConsoleTab] = useState<'testcase' | 'result'>('testcase');
   
-  const [running, setRunning] = useState(false);
+  const [running, setRunning] = useState<boolean>(false);
   const [result, setResult] = useState<CodingEvaluation | null>(null);
-  const [submissionsHistory, setSubmissionsHistory] = useState<Array<{ id: number; status: string; runtime: string; memory: string; time: string }>>([]);
+  const [submissionsHistory, setSubmissionsHistory] = useState<Array<any>>([]);
+  const [showConfirmModal, setShowConfirmModal] = useState<boolean>(false);
+  const [showSuccessModal, setShowSuccessModal] = useState<boolean>(false);
+  const [savedRecord, setSavedRecord] = useState<PracticeRecord | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   const handleLanguageChange = (newLang: 'python' | 'javascript' | 'java') => {
     setLanguage(newLang);
     setCode(currentProblem.starterCode[newLang]);
   };
+
+  const currentProblemIndex = PROBLEMS.findIndex(p => p.id === selectedProblemId);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const handleProblemChange = (probId: string) => {
     setSelectedProblemId(probId);
@@ -180,6 +189,14 @@ export const CodingWorkspace: React.FC<CodingWorkspaceProps> = ({ onProceedToSQL
   };
 
   const handleRunCode = async () => {
+    setRunning(true);
+    const res = await api.submitCode(code);
+    setResult(res);
+    setActiveConsoleTab('result');
+    setRunning(false);
+  };
+
+  const handleSubmitSolution = async () => {
     setRunning(true);
     const res = await api.submitCode(code);
     setResult(res);
@@ -200,147 +217,217 @@ export const CodingWorkspace: React.FC<CodingWorkspaceProps> = ({ onProceedToSQL
     ]);
 
     userStore.submitAssessmentResult('coding-assessment', 'technical', res.passed_tests === res.total_tests ? 95 : 65);
+
+    // If there is a next question, advance to next question
+    if (currentProblemIndex < PROBLEMS.length - 1) {
+      const nextProblem = PROBLEMS[currentProblemIndex + 1];
+      setToastMessage(`Solution submitted! Loading next question: ${nextProblem.title}...`);
+      setTimeout(() => {
+        setSelectedProblemId(nextProblem.id);
+        setCode(nextProblem.starterCode[language]);
+        setResult(null);
+        setActiveLeftTab('description');
+        setActiveConsoleTab('testcase');
+        setToastMessage(null);
+      }, 1000);
+    } else {
+      setToastMessage('All coding challenges completed! Ready to proceed.');
+      setTimeout(() => setToastMessage(null), 3500);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const start = e.currentTarget.selectionStart;
+      const end = e.currentTarget.selectionEnd;
+      const val = code;
+      setCode(val.substring(0, start) + '    ' + val.substring(end));
+      setTimeout(() => {
+        if (e.currentTarget) {
+          e.currentTarget.selectionStart = e.currentTarget.selectionEnd = start + 4;
+        }
+      }, 0);
+    }
+  };
+
+  const handlePromptEndPractice = () => {
+    setShowConfirmModal(true);
+  };
+
+  const handleConfirmedEndPractice = () => {
+    setIsSubmitting(true);
+
+    const solvedCount = new Set(submissionsHistory.filter(s => s.status === 'Accepted').map(s => s.problemId || selectedProblemId)).size;
+    const totalProbs = PROBLEMS.length;
+    const scorePct = totalProbs > 0 ? Math.round((solvedCount / totalProbs) * 100) : 0;
+    const accuracyPct = submissionsHistory.length > 0
+      ? Math.round((submissionsHistory.filter(s => s.status === 'Accepted').length / submissionsHistory.length) * 100)
+      : (solvedCount > 0 ? 100 : 0);
+
+    const record: PracticeRecord = {
+      id: `coding_${Date.now()}`,
+      sessionId: `coding_ws_${Date.now()}`,
+      userEmail: userStore.getCurrentUserEmail(),
+      practiceType: 'coding',
+      title: 'Algorithm & Data Structure Practice',
+      topics: ['Algorithms', 'Binary Search', 'Two Pointers'],
+      difficulty: 'Medium',
+      score: scorePct,
+      accuracy: accuracyPct,
+      questionsAttempted: Math.max(solvedCount, submissionsHistory.length > 0 ? 1 : 0),
+      totalQuestions: totalProbs,
+      timeTakenSeconds: 320,
+      completedAt: new Date().toISOString(),
+      status: 'Completed',
+      metrics: {
+        problemsSolved: solvedCount,
+        testCasesPassed: result ? result.passed_tests : (solvedCount * 3),
+        totalTestCases: result ? result.total_tests : (totalProbs * 3),
+        bestRuntime: '38 ms',
+        bestMemory: '16.2 MB'
+      }
+    };
+
+    userStore.savePracticeRecord(record);
+    setSavedRecord(record);
+    setIsSubmitting(false);
+    setShowConfirmModal(false);
+    setShowSuccessModal(true);
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] font-sans text-[#0A192F]">
+    <div className="min-h-screen bg-[#F8FAFC] font-sans text-[#0A192F] p-4 lg:p-6">
+      
+      {/* MAIN 2-COLUMN CODING WORKSPACE (Matching Screenshot 4) */}
+      <div className="max-w-[1600px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
 
-      {/* TOP HEADER BAR */}
-      <div className="px-6 py-3 bg-white border-b border-[#E2E8F0] flex items-center justify-between shadow-sm">
-        <div className="flex items-center space-x-4">
-          <div className="flex items-center space-x-2">
-            <Code className="w-5 h-5 text-sky-600" />
-            <span className="font-extrabold text-[#0A192F] text-sm">CareerForge IDE</span>
-          </div>
-
-          <span className="text-[#E2E8F0]">|</span>
-
-          {/* PROBLEM SELECTOR DROPDOWN */}
-          <select
-            value={selectedProblemId}
-            onChange={(e) => handleProblemChange(e.target.value)}
-            className="px-3 py-1.5 border border-[#E2E8F0] rounded-xl bg-slate-50 text-xs font-bold text-[#0A192F] focus:outline-none focus:border-[#0A192F]"
-          >
-            {PROBLEMS.map(p => (
-              <option key={p.id} value={p.id}>{p.title}</option>
-            ))}
-          </select>
-
-          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-            currentProblem.difficulty === 'Easy' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900'
-          }`}>
-            {currentProblem.difficulty}
-          </span>
-        </div>
-
-        {/* TOP RIGHT LANGUAGE SELECTOR & ACTIONS */}
-        <div className="flex items-center space-x-3">
-          <select
-            value={language}
-            onChange={(e) => handleLanguageChange(e.target.value as any)}
-            className="px-3 py-1.5 border border-[#E2E8F0] rounded-xl bg-slate-50 text-xs font-semibold text-[#0A192F] focus:outline-none"
-          >
-            <option value="python">Python 3</option>
-            <option value="javascript">JavaScript (ES6)</option>
-            <option value="java">Java 17</option>
-          </select>
-
-          <button
-            onClick={handleResetCode}
-            className="p-2 border border-[#E2E8F0] hover:bg-slate-100 rounded-xl text-[#64748B] transition-colors"
-            title="Reset to Starter Code"
-          >
-            <RotateCcw className="w-4 h-4" />
-          </button>
-
-          <button
-            onClick={onProceedToSQL}
-            className="px-4 py-2 bg-[#0A192F] hover:bg-[#112240] text-white text-xs font-bold rounded-xl transition-all flex items-center shadow-sm"
-          >
-            <span>Open SQL Workspace</span>
-            <ArrowRight className="w-3.5 h-3.5 ml-1.5 text-[#FFDE59]" />
-          </button>
-        </div>
-      </div>
-
-      {/* MAIN SPLIT-PANE WORKSPACE (2 COLUMNS) */}
-      <div className="p-6 max-w-[1600px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-
-        {/* LEFT PANE: TABBED PROBLEM DESCRIPTION & HINTS (5 COLS) */}
-        <div className="lg:col-span-5 bg-white rounded-2xl border border-[#E2E8F0] shadow-sm overflow-hidden flex flex-col h-[750px]">
+        {/* LEFT PANEL: PROBLEM DESCRIPTION, EDITORIAL & SUBMISSIONS (5 COLS) */}
+        <div className="lg:col-span-5 bg-white rounded-2xl border border-[#E2E8F0] shadow-sm overflow-hidden flex flex-col h-[calc(100vh-100px)] min-h-[720px]">
           
-          {/* TAB HEADER */}
-          <div className="flex items-center border-b border-[#E2E8F0] bg-slate-50/50 px-4 text-xs font-semibold">
-            <button
-              onClick={() => setActiveLeftTab('description')}
-              className={`py-3 px-4 border-b-2 font-bold transition-all flex items-center space-x-1.5 ${
-                activeLeftTab === 'description' ? 'border-[#0A192F] text-[#0A192F]' : 'border-transparent text-[#64748B] hover:text-[#0A192F]'
-              }`}
-            >
-              <FileText className="w-3.5 h-3.5" />
-              <span>Description</span>
-            </button>
-            <button
-              onClick={() => setActiveLeftTab('editorial')}
-              className={`py-3 px-4 border-b-2 font-bold transition-all flex items-center space-x-1.5 ${
-                activeLeftTab === 'editorial' ? 'border-[#0A192F] text-[#0A192F]' : 'border-transparent text-[#64748B] hover:text-[#0A192F]'
-              }`}
-            >
-              <Lightbulb className="w-3.5 h-3.5 text-amber-500" />
-              <span>Editorial & Hints</span>
-            </button>
-            <button
-              onClick={() => setActiveLeftTab('submissions')}
-              className={`py-3 px-4 border-b-2 font-bold transition-all flex items-center space-x-1.5 ${
-                activeLeftTab === 'submissions' ? 'border-[#0A192F] text-[#0A192F]' : 'border-transparent text-[#64748B] hover:text-[#0A192F]'
-              }`}
-            >
-              <History className="w-3.5 h-3.5" />
-              <span>Submissions ({submissionsHistory.length})</span>
-            </button>
+          {/* TAB HEADER (Matching Screenshot 4) */}
+          <div className="flex items-center justify-between border-b border-[#E2E8F0] bg-white px-4 text-xs font-semibold select-none shrink-0">
+            <div className="flex items-center space-x-1">
+              <button
+                onClick={() => setActiveLeftTab('description')}
+                className={`py-3.5 px-3 border-b-2 font-bold transition-all flex items-center space-x-2 ${
+                  activeLeftTab === 'description'
+                    ? 'border-[#0A192F] text-[#0A192F]'
+                    : 'border-transparent text-[#64748B] hover:text-[#0A192F]'
+                }`}
+              >
+                <FileText className="w-4 h-4 text-slate-500" />
+                <span>Description</span>
+              </button>
+
+              <button
+                onClick={() => setActiveLeftTab('editorial')}
+                className={`py-3.5 px-3 border-b-2 font-bold transition-all flex items-center space-x-2 ${
+                  activeLeftTab === 'editorial'
+                    ? 'border-[#0A192F] text-[#0A192F]'
+                    : 'border-transparent text-[#64748B] hover:text-[#0A192F]'
+                }`}
+              >
+                <Lightbulb className="w-4 h-4 text-amber-500" />
+                <span>Editorial & Hints</span>
+              </button>
+
+              <button
+                onClick={() => setActiveLeftTab('submissions')}
+                className={`py-3.5 px-3 border-b-2 font-bold transition-all flex items-center space-x-2 ${
+                  activeLeftTab === 'submissions'
+                    ? 'border-[#0A192F] text-[#0A192F]'
+                    : 'border-transparent text-[#64748B] hover:text-[#0A192F]'
+                }`}
+              >
+                <History className="w-4 h-4 text-slate-500" />
+                <span>Submissions ({submissionsHistory.length})</span>
+              </button>
+            </div>
+
+            {/* PROBLEM SELECTOR DROPDOWN & NEXT STAGE LINK */}
+            <div className="flex items-center space-x-2">
+              <select
+                value={selectedProblemId}
+                onChange={(e) => handleProblemChange(e.target.value)}
+                className="py-1 px-2.5 bg-slate-50 border border-[#E2E8F0] rounded-lg text-[11px] font-bold text-[#0A192F] focus:outline-none focus:border-[#0A192F] max-w-[140px] truncate"
+                title="Select Problem"
+              >
+                {PROBLEMS.map(p => (
+                  <option key={p.id} value={p.id}>{p.title}</option>
+                ))}
+              </select>
+
+              {onProceedToSQL && (
+                <button
+                  onClick={onProceedToSQL}
+                  className="p-1.5 text-slate-400 hover:text-sky-600 hover:bg-slate-50 rounded-lg transition-colors"
+                  title="Proceed to SQL Workspace"
+                >
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
           </div>
 
-          {/* TAB 1: DESCRIPTION */}
+          {/* TAB 1: DESCRIPTION (Matching Screenshot 4) */}
           {activeLeftTab === 'description' && (
             <div className="p-6 overflow-y-auto space-y-6 text-xs text-[#0A192F] font-sans flex-1">
               <div>
-                <span className="text-[10px] font-mono text-sky-600 font-bold uppercase tracking-wider block mb-1">
+                <span className="text-[11px] font-mono text-[#0284C7] font-bold uppercase tracking-wider block mb-1.5">
                   {currentProblem.category}
                 </span>
-                <h2 className="text-xl font-extrabold text-[#0A192F]">{currentProblem.title}</h2>
+                <div className="flex items-center justify-between">
+                  <h1 className="text-xl sm:text-2xl font-black text-[#0A192F] tracking-tight">
+                    {currentProblem.title}
+                  </h1>
+                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold shrink-0 ml-3 ${
+                    currentProblem.difficulty === 'Easy' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900'
+                  }`}>
+                    {currentProblem.difficulty}
+                  </span>
+                </div>
               </div>
 
-              <div className="space-y-3 leading-relaxed text-[#334155]">
+              {/* PROBLEM STATEMENT */}
+              <div className="space-y-3 leading-relaxed text-[#334155] text-[13px]">
                 <p>{currentProblem.description}</p>
               </div>
 
-              {/* EXAMPLES */}
-              <div className="space-y-4 pt-2">
-                <h3 className="font-bold text-[#0A192F] text-xs font-mono uppercase">Examples</h3>
+              {/* EXAMPLES (Matching Screenshot 4) */}
+              <div className="space-y-3 pt-2">
+                <h3 className="font-bold text-[#0A192F] text-xs font-mono uppercase tracking-wider">
+                  EXAMPLES
+                </h3>
                 {currentProblem.examples.map((ex, i) => (
-                  <div key={i} className="p-4 bg-slate-50 border border-[#E2E8F0] rounded-xl space-y-2 font-mono text-[11px]">
-                    <div className="text-[#64748B]">
-                      <strong className="text-[#0A192F]">Input:</strong> {ex.input}
+                  <div key={i} className="p-4 bg-slate-50/80 border border-[#E2E8F0] rounded-xl space-y-2 font-mono text-xs">
+                    <div className="text-[#334155]">
+                      <span className="font-bold text-[#0A192F]">Input: </span>
+                      <span className="text-slate-600">{ex.input}</span>
                     </div>
-                    <div className="text-[#64748B]">
-                      <strong className="text-[#0A192F]">Output:</strong> {ex.output}
+                    <div className="text-[#334155]">
+                      <span className="font-bold text-[#0A192F]">Output: </span>
+                      <span className="text-slate-600">{ex.output}</span>
                     </div>
                     {ex.explanation && (
-                      <div className="text-[#64748B] text-[10px] pt-1 border-t border-slate-200">
-                        <strong className="text-[#0A192F]">Explanation:</strong> {ex.explanation}
+                      <div className="text-[#64748B] text-[11px] pt-1 border-t border-slate-200/80">
+                        <span className="font-bold text-[#0A192F]">Explanation: </span>
+                        <span>{ex.explanation}</span>
                       </div>
                     )}
                   </div>
                 ))}
               </div>
 
-              {/* CONSTRAINTS */}
-              <div className="space-y-2 pt-2">
-                <h3 className="font-bold text-[#0A192F] text-xs font-mono uppercase">Constraints</h3>
-                <ul className="space-y-1.5 font-mono text-[11px] text-[#64748B]">
+              {/* CONSTRAINTS (Matching Screenshot 4) */}
+              <div className="space-y-2.5 pt-2">
+                <h3 className="font-bold text-[#0A192F] text-xs font-mono uppercase tracking-wider">
+                  CONSTRAINTS
+                </h3>
+                <ul className="space-y-2 font-mono text-xs text-[#475569]">
                   {currentProblem.constraints.map((c, i) => (
-                    <li key={i} className="flex items-center">
-                      <span className="w-1.5 h-1.5 rounded-full bg-slate-400 mr-2"></span>
+                    <li key={i} className="flex items-center space-x-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0"></span>
                       <span>{c}</span>
                     </li>
                   ))}
@@ -407,43 +494,63 @@ export const CodingWorkspace: React.FC<CodingWorkspaceProps> = ({ onProceedToSQL
 
         </div>
 
-        {/* RIGHT PANE: IDE EDITOR & OUTPUT CONSOLE (7 COLS) */}
-        <div className="lg:col-span-7 space-y-4">
+        {/* RIGHT PANEL: CODE EDITOR & CONSOLE (7 COLS) (Matching Screenshot 4) */}
+        <div className="lg:col-span-7 space-y-4 flex flex-col h-[calc(100vh-100px)] min-h-[720px]">
 
           {/* CODE EDITOR CONTAINER */}
-          <div className="bg-[#0B0F17] rounded-2xl overflow-hidden border border-slate-800 shadow-xl flex flex-col h-[460px]">
-            {/* Editor Top Bar */}
+          <div className="bg-[#0B0F17] rounded-2xl overflow-hidden border border-slate-800/80 shadow-xl flex flex-col flex-1">
+            
+            {/* EDITOR HEADER (Matching Screenshot 4: <> solution.py | UTF-8 • PYTHON) */}
             <div className="px-5 py-3 bg-[#111827] border-b border-slate-800 flex justify-between items-center text-xs font-mono">
-              <div className="flex items-center space-x-2 text-slate-300 font-bold">
+              <div className="flex items-center space-x-2 text-slate-200 font-bold">
                 <Code className="w-4 h-4 text-sky-400" />
                 <span>solution.{language === 'python' ? 'py' : language === 'javascript' ? 'js' : 'java'}</span>
               </div>
-              <div className="text-[10px] text-slate-500 font-mono">
-                UTF-8 • {language.toUpperCase()}
+
+              <div className="flex items-center space-x-3">
+                <select
+                  value={language}
+                  onChange={(e) => handleLanguageChange(e.target.value as any)}
+                  className="bg-transparent text-slate-400 hover:text-slate-200 font-mono text-[11px] focus:outline-none cursor-pointer"
+                  title="Change Language"
+                >
+                  <option value="python" className="bg-[#111827] text-slate-200">UTF-8 • PYTHON</option>
+                  <option value="javascript" className="bg-[#111827] text-slate-200">UTF-8 • JAVASCRIPT</option>
+                  <option value="java" className="bg-[#111827] text-slate-200">UTF-8 • JAVA</option>
+                </select>
+
+                <button
+                  onClick={handleResetCode}
+                  className="text-slate-500 hover:text-slate-300 transition-colors p-1"
+                  title="Reset to starter code"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                </button>
               </div>
             </div>
 
-            {/* Editor Textarea with Line Numbers Gutter */}
-            <div className="flex-1 flex overflow-hidden font-mono text-xs text-slate-100">
+            {/* EDITOR TEXTAREA WITH LINE NUMBERS GUTTER */}
+            <div className="flex-1 flex overflow-hidden font-mono text-xs text-slate-100 relative">
               {/* Line Numbers Gutter */}
-              <div className="w-12 bg-[#0F172A]/50 py-4 text-right pr-3 select-none text-slate-600 font-mono text-xs border-r border-slate-800/80 space-y-1">
-                {Array.from({ length: Math.max(16, code.split('\n').length) }).map((_, i) => (
-                  <div key={i}>{i + 1}</div>
+              <div className="w-12 bg-[#0A0E17] py-4 text-right pr-3 select-none text-slate-600 font-mono text-xs border-r border-slate-800/60 space-y-1 shrink-0">
+                {Array.from({ length: Math.max(17, code.split('\n').length) }).map((_, i) => (
+                  <div key={i} className="leading-5">{i + 1}</div>
                 ))}
               </div>
 
-              {/* Textarea */}
+              {/* Textarea Code Input */}
               <textarea
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
+                onKeyDown={handleKeyDown}
                 spellCheck={false}
-                className="flex-1 p-4 bg-transparent text-slate-100 font-mono text-xs focus:outline-none resize-none leading-relaxed selection:bg-sky-500/30"
+                className="flex-1 p-4 bg-transparent text-slate-100 font-mono text-xs focus:outline-none resize-none leading-5 selection:bg-sky-500/30 overflow-y-auto"
               />
             </div>
 
-            {/* Bottom Actions Bar */}
-            <div className="px-5 py-3 bg-[#111827] border-t border-slate-800 flex items-center justify-between">
-              <span className="text-[10px] text-slate-400 font-mono">Auto-formatting enabled</span>
+            {/* BOTTOM ACTIONS BAR (Matching Screenshot 4) */}
+            <div className="px-5 py-3 bg-[#111827] border-t border-slate-800/80 flex items-center justify-between shrink-0">
+              <span className="text-[11px] text-slate-400 font-mono">Auto-formatting enabled</span>
               
               <div className="flex items-center space-x-3">
                 <button
@@ -456,19 +563,26 @@ export const CodingWorkspace: React.FC<CodingWorkspaceProps> = ({ onProceedToSQL
                 </button>
 
                 <button
-                  onClick={handleRunCode}
+                  onClick={handleSubmitSolution}
                   disabled={running}
-                  className="px-6 py-2 bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition-all flex items-center shadow-md shadow-sky-600/30"
+                  className="px-6 py-2 bg-[#0284C7] hover:bg-[#0369A1] disabled:opacity-50 text-white font-bold text-xs rounded-xl transition-all flex items-center shadow-md shadow-sky-600/30"
                 >
                   <Send className="w-3.5 h-3.5 mr-1.5" />
                   <span>Submit Solution</span>
+                </button>
+
+                <button
+                  onClick={handlePromptEndPractice}
+                  className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl transition-all shadow-sm"
+                >
+                  End Practice
                 </button>
               </div>
             </div>
           </div>
 
-          {/* BOTTOM CONSOLE PANEL (TESTCASE & RESULTS) */}
-          <div className="bg-white rounded-2xl border border-[#E2E8F0] shadow-sm p-5 space-y-4">
+          {/* BOTTOM CONSOLE PANEL (TESTCASE & RESULTS) (Matching Screenshot 4) */}
+          <div className="bg-white rounded-2xl border border-[#E2E8F0] shadow-sm p-5 space-y-4 shrink-0">
             
             {/* CONSOLE TAB HEADER */}
             <div className="flex justify-between items-center border-b border-[#E2E8F0] pb-3 text-xs font-bold">
@@ -476,16 +590,16 @@ export const CodingWorkspace: React.FC<CodingWorkspaceProps> = ({ onProceedToSQL
                 <button
                   onClick={() => setActiveConsoleTab('testcase')}
                   className={`pb-1 transition-all flex items-center space-x-1.5 ${
-                    activeConsoleTab === 'testcase' ? 'text-[#0A192F] border-b-2 border-[#0A192F]' : 'text-[#64748B]'
+                    activeConsoleTab === 'testcase' ? 'text-[#0A192F] border-b-2 border-[#0A192F]' : 'text-[#64748B] hover:text-[#0A192F]'
                   }`}
                 >
-                  <Terminal className="w-3.5 h-3.5" />
+                  <span className="font-mono font-bold text-xs">&gt;_</span>
                   <span>Testcases</span>
                 </button>
                 <button
                   onClick={() => setActiveConsoleTab('result')}
                   className={`pb-1 transition-all flex items-center space-x-1.5 ${
-                    activeConsoleTab === 'result' ? 'text-[#0A192F] border-b-2 border-[#0A192F]' : 'text-[#64748B]'
+                    activeConsoleTab === 'result' ? 'text-[#0A192F] border-b-2 border-[#0A192F]' : 'text-[#64748B] hover:text-[#0A192F]'
                   }`}
                 >
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
@@ -494,11 +608,11 @@ export const CodingWorkspace: React.FC<CodingWorkspaceProps> = ({ onProceedToSQL
               </div>
             </div>
 
-            {/* TAB CONTENT: TESTCASE */}
+            {/* TAB CONTENT: TESTCASE (Matching Screenshot 4) */}
             {activeConsoleTab === 'testcase' && (
               <div className="space-y-3 font-mono text-xs">
-                <div className="p-3 bg-slate-50 border border-[#E2E8F0] rounded-xl space-y-2">
-                  <div className="text-[10px] text-[#64748B] uppercase font-bold">Case 1 Input:</div>
+                <div className="p-3.5 bg-slate-50/80 border border-[#E2E8F0] rounded-xl space-y-1.5">
+                  <div className="text-[10px] text-[#64748B] uppercase font-bold tracking-wider">CASE 1 INPUT:</div>
                   <div className="text-[#0A192F]">nums = [4, 5, 6, 7, 0, 1, 2]</div>
                   <div className="text-[#0A192F]">target = 0</div>
                 </div>
@@ -546,6 +660,35 @@ export const CodingWorkspace: React.FC<CodingWorkspaceProps> = ({ onProceedToSQL
         </div>
 
       </div>
+      
+      {/* SUBMISSION FEEDBACK TOAST */}
+      {toastMessage && (
+        <div className="fixed bottom-6 right-6 bg-[#0A192F] text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center space-x-3 text-xs font-semibold z-50 border border-slate-700 animate-fade-in">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
+      {/* CONFIRMATION MODAL WITH CASE-SENSITIVE "CONFIRM" VERIFICATION */}
+      <EndPracticeModal
+        isOpen={showConfirmModal}
+        onCancel={() => setShowConfirmModal(false)}
+        onConfirm={handleConfirmedEndPractice}
+        isSubmitting={isSubmitting}
+        practiceTitle="Coding Workspace"
+      />
+
+      {/* SUCCESS MODAL */}
+      {showSuccessModal && savedRecord && (
+        <PracticeCompletionSuccess
+          record={savedRecord}
+          onReview={() => setShowSuccessModal(false)}
+          onViewProfile={() => {
+            if (onProceedToSQL) onProceedToSQL();
+          }}
+          onClose={() => setShowSuccessModal(false)}
+        />
+      )}
 
     </div>
   );

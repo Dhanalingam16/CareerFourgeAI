@@ -76,6 +76,12 @@ export const Navbar: React.FC<NavbarProps> = ({
                       <span className="text-[10px] text-[#64748B]">Software Engineer Target</span>
                     </div>
                     <button
+                      onClick={() => { setUserDropdownOpen(false); onNavigate('profile'); }}
+                      className="w-full text-left px-4 py-2 text-[#0F172A] hover:bg-[#F8FAFC] font-medium flex items-center justify-between"
+                    >
+                      <span>Profile & Practice History</span>
+                    </button>
+                    <button
                       onClick={() => { setUserDropdownOpen(false); onNavigate('dashboard'); }}
                       className="w-full text-left px-4 py-2 text-[#0F172A] hover:bg-[#F8FAFC] font-medium"
                     >

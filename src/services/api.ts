@@ -9,7 +9,12 @@ import {
   ReadinessScore,
   PersonalizedRoadmap,
   ReassessmentResult,
-  RecruiterDashboard
+  RecruiterDashboard,
+  PracticeRecord,
+  PracticeStats,
+  AtsAnalysisResponse,
+  InterviewChatRequest,
+  InterviewChatResponse
 } from '../types';
 
 const API_BASE = '/api/v1';
@@ -62,13 +67,32 @@ export const api = {
     });
   },
 
-  // Resume Upload
+  // Resume Upload & Real ATS AI Analysis
   uploadResume: async (): Promise<{ compatibility_score: number; matched_skills: string[]; missing_skills: string[] }> => {
     return fetchJSON('/resume/upload', { method: 'POST' }, {
       compatibility_score: 78.0,
       matched_skills: ["Python", "SQL", "REST APIs", "Java", "MySQL"],
       missing_skills: ["System Design", "Docker", "Kubernetes"]
     });
+  },
+
+  analyzeATS: async (file: File, targetRole?: string, jobDescription?: string): Promise<AtsAnalysisResponse> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (targetRole) formData.append('target_role', targetRole);
+    if (jobDescription) formData.append('job_description', jobDescription);
+
+    const response = await fetch(`${API_BASE}/resume/analyze`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errJson = await response.json().catch(() => ({}));
+      throw new Error(errJson.detail || 'AI analysis failed. Please try again.');
+    }
+
+    return response.json();
   },
 
   // Skill Truth Engine
@@ -183,7 +207,17 @@ export const api = {
         : config.interview_type === "SQL"
         ? "Explain the difference between INNER JOIN, LEFT JOIN, and FULL OUTER JOIN with a realistic example."
         : "Explain the difference between a list and a tuple in Python. When would you use each?",
-      difficulty: config.difficulty || "Intermediate"
+  sendInterviewChatMessage: async (payload: InterviewChatRequest): Promise<InterviewChatResponse> => {
+    return fetchJSON<InterviewChatResponse>('/interview/chat', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }, {
+      interview_id: payload.interview_id || `ai_sess_${Date.now()}`,
+      stage: payload.message.toLowerCase().includes("technical") ? "setup" : "interview",
+      message: "Great. What role are you interviewing for?",
+      current_question_num: 1,
+      total_questions: 5,
+      is_completed: false
     });
   },
 
@@ -213,6 +247,23 @@ export const api = {
         difficulty: "Intermediate"
       }
     });
+  },
+
+  transcribeAudio: async (audioBlob: Blob): Promise<{ transcript: string }> => {
+    try {
+      const formData = new FormData();
+      formData.append('file', audioBlob, 'recording.webm');
+      const res = await fetch(`${API_BASE}/interview/stt`, {
+        method: 'POST',
+        body: formData,
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (err) {
+      console.warn('[CareerForge AI API] STT network call failed, fallback mode', err);
+    }
+    return { transcript: 'I built a full-stack web application using React and FastAPI with real-time AI analytics.' };
   },
 
   getInterviewReport: async (interviewId: number = 101) => {
@@ -440,6 +491,39 @@ export const api = {
           decision_support_badge: "Recommended with Upskilling"
         }
       ]
+    });
+  },
+
+  // Practice System APIs
+  submitPracticeCompletion: async (record: PracticeRecord): Promise<{ status: string; record_id: string }> => {
+    return fetchJSON('/practice/complete', {
+      method: 'POST',
+      body: JSON.stringify(record)
+    }, {
+      status: 'saved',
+      record_id: record.id
+    });
+  },
+
+  getPracticeHistory: async (userEmail?: string): Promise<PracticeRecord[]> => {
+    return fetchJSON<PracticeRecord[]>(`/practice/history?email=${encodeURIComponent(userEmail || '')}`, {
+      method: 'GET'
+    }, []);
+  },
+
+  getPracticeStats: async (userEmail?: string): Promise<PracticeStats> => {
+    return fetchJSON<PracticeStats>(`/practice/stats?email=${encodeURIComponent(userEmail || '')}`, {
+      method: 'GET'
+    }, {
+      totalSessions: 0,
+      completedSessions: 0,
+      latestScore: 0,
+      averageScore: 0,
+      overallAccuracy: 0,
+      questionsPracticed: 0,
+      latestPracticeType: '',
+      lastPracticeDate: '',
+      recentActivity: []
     });
   }
 };

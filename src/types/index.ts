@@ -1,10 +1,12 @@
 export interface UserProfileData {
   fullName: string;
+  email?: string;
   age: string;
   location: string;
   educationLevel: 'High School' | 'Diploma' | 'Undergraduate' | 'Postgraduate' | 'Other';
   college: string;
   yearOfStudy: '1st Year' | '2nd Year' | '3rd Year' | '4th Year' | 'Graduate' | 'Working Professional';
+  graduationYear?: string;
 }
 
 export interface CareerGoalData {
@@ -19,12 +21,71 @@ export interface ClaimedSkillItem {
   claimedLevel: 'Beginner' | 'Intermediate' | 'Advanced';
 }
 
+export interface AtsCategoryScores {
+  ats_compatibility: number;
+  content_quality: number;
+  experience: number;
+  technical_skills: number;
+  projects: number;
+  achievements: number;
+  keywords: number;
+  formatting: number;
+  education: number;
+  contact_information: number;
+}
+
+export interface AtsImprovement {
+  priority: 'high' | 'medium' | 'low';
+  section: string;
+  problem: string;
+  recommendation: string;
+  example: string;
+}
+
+export interface AtsKeywordAnalysis {
+  matched_keywords: string[];
+  missing_keywords: string[];
+  keyword_match_percentage: number;
+}
+
+export interface AtsChecklistItem {
+  item: string;
+  passed: boolean;
+  note: string;
+}
+
+export interface AtsJobMatch {
+  job_match_score: number;
+  matched_keywords: string[];
+  missing_keywords: string[];
+  skill_gaps: string[];
+  experience_gaps: string[];
+  recommendations: string[];
+}
+
+export interface AtsAnalysisResponse {
+  overall_score: number;
+  summary: string;
+  category_scores: AtsCategoryScores;
+  strengths: string[];
+  weaknesses: string[];
+  improvements: AtsImprovement[];
+  keyword_analysis: AtsKeywordAnalysis;
+  section_analysis: Record<string, number>;
+  ats_checklist: AtsChecklistItem[];
+  final_recommendation: string;
+  job_match?: AtsJobMatch | null;
+  target_role?: string;
+  filename?: string;
+}
+
 export interface ATSAnalysisResult {
-  atsScore: number; // 78
+  atsScore: number;
   whatsWorking: string[];
   whatsMissing: string[];
   targetRoleMatches: { skill: string; status: 'Strong' | 'Good' | 'Needs improvement' | 'Missing evidence' }[];
   calculationReasoning: string;
+  fullAnalysis?: AtsAnalysisResponse;
 }
 
 export interface JobRequirement {
@@ -83,6 +144,7 @@ export interface JobGapResponse {
 
 export interface Question {
   question_id: number;
+  interview_id?: number;
   sequence_num: number;
   total_budget: number;
   category: string;
@@ -120,6 +182,9 @@ export interface SQLEvaluation {
   result_rows: Record<string, any>[];
   execution_time_ms: number;
   feedback: string;
+  is_correct?: boolean;
+  score?: number;
+  syntax_valid?: boolean;
 }
 
 export interface ReadinessScore {
@@ -177,8 +242,110 @@ export interface RecruiterCandidate {
   decision_support_badge: 'Strong Match' | 'Recommended with Upskilling' | 'High Risk Gap';
 }
 
+export interface InterviewChatMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+}
+
+export interface InterviewChatRequest {
+  interview_id?: string;
+  message: string;
+  history?: InterviewChatMessage[];
+  interview_config?: Record<string, any>;
+}
+
+export interface InterviewEvaluationDetail {
+  answer_quality: number;
+  technical_knowledge: number;
+  problem_solving: number;
+  communication: number;
+  depth: number;
+  feedback: string;
+  strengths: string[];
+  weaknesses: string[];
+}
+
+export interface InterviewFinalReport {
+  overall_score: number;
+  technical_knowledge: number;
+  problem_solving: number;
+  communication: number;
+  answer_quality: number;
+  depth: number;
+  strengths: string[];
+  weaknesses: string[];
+  recommendations: string[];
+  final_feedback: string;
+}
+
+export interface InterviewChatResponse {
+  interview_id: string;
+  stage: 'setup' | 'interview' | 'completed';
+  message: string;
+  question?: string | null;
+  current_question_num: number;
+  total_questions: number;
+  next_difficulty?: string | null;
+  evaluation?: InterviewEvaluationDetail | null;
+  final_report?: InterviewFinalReport | null;
+  interview_config?: Record<string, any> | null;
+  is_completed: boolean;
+}
+
 export interface RecruiterDashboard {
   job_title: string;
   total_applicants: number;
   applicants: RecruiterCandidate[];
+}
+
+export interface PracticeRecord {
+  id: string;
+  sessionId: string;
+  userEmail: string;
+  practiceType: 'aptitude' | 'coding' | 'sql' | 'ai-interview';
+  title: string;
+  topics: string[];
+  difficulty: string;
+  score: number; // 0-100
+  accuracy: number; // 0-100%
+  questionsAttempted: number;
+  totalQuestions: number;
+  timeTakenSeconds: number;
+  completedAt: string; // ISO date string
+  status: 'Completed' | 'completed';
+  metrics: {
+    // Aptitude specifics
+    correct?: number;
+    wrong?: number;
+    unattempted?: number;
+    // Coding specifics
+    problemsSolved?: number;
+    testCasesPassed?: number;
+    totalTestCases?: number;
+    bestRuntime?: string;
+    bestMemory?: string;
+    // SQL specifics
+    queriesExecuted?: number;
+    syntaxValid?: boolean;
+    rowsReturned?: number;
+    executionTimeMs?: number;
+    // AI Interview specifics
+    overallScore?: number;
+    technicalDepth?: number;
+    communicationScore?: number;
+    targetRole?: string;
+  };
+  detailedData?: any;
+}
+
+export interface PracticeStats {
+  totalSessions: number;
+  completedSessions: number;
+  latestScore: number;
+  averageScore: number;
+  overallAccuracy: number;
+  questionsPracticed: number;
+  latestPracticeType: string;
+  lastPracticeDate: string;
+  recentActivity: PracticeRecord[];
 }

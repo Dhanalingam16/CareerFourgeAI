@@ -43,7 +43,7 @@ class JobAnalysisResponse(BaseModel):
     optional_skills: List[JobRequirementSchema]
     responsibilities: List[str]
 
-# --- Resume Schemas ---
+# --- Resume & ATS Schemas ---
 class ResumeAnalysisResponse(BaseModel):
     compatibility_score: float # e.g. 78.0
     matched_skills: List[str]
@@ -51,6 +51,58 @@ class ResumeAnalysisResponse(BaseModel):
     potential_gaps: List[str]
     extracted_projects: List[Dict[str, Any]]
     experience_summary: str
+
+class AtsCategoryScoresSchema(BaseModel):
+    ats_compatibility: int = 12
+    content_quality: int = 12
+    experience: int = 12
+    technical_skills: int = 13
+    projects: int = 8
+    achievements: int = 7
+    keywords: int = 8
+    formatting: int = 4
+    education: int = 3
+    contact_information: int = 2
+
+class AtsImprovementSchema(BaseModel):
+    priority: str = "high"
+    section: str = "Experience"
+    problem: str
+    recommendation: str
+    example: str
+
+class AtsKeywordAnalysisSchema(BaseModel):
+    matched_keywords: List[str] = []
+    missing_keywords: List[str] = []
+    keyword_match_percentage: int = 0
+
+class AtsChecklistItemSchema(BaseModel):
+    item: str
+    passed: bool
+    note: str = ""
+
+class AtsJobMatchSchema(BaseModel):
+    job_match_score: int = 75
+    matched_keywords: List[str] = []
+    missing_keywords: List[str] = []
+    skill_gaps: List[str] = []
+    experience_gaps: List[str] = []
+    recommendations: List[str] = []
+
+class AtsAnalysisResponse(BaseModel):
+    overall_score: int
+    summary: str
+    category_scores: AtsCategoryScoresSchema
+    strengths: List[str]
+    weaknesses: List[str]
+    improvements: List[AtsImprovementSchema]
+    keyword_analysis: AtsKeywordAnalysisSchema
+    section_analysis: Dict[str, int]
+    ats_checklist: List[AtsChecklistItemSchema]
+    final_recommendation: str
+    job_match: Optional[AtsJobMatchSchema] = None
+    target_role: Optional[str] = "Software Engineer"
+    filename: Optional[str] = "Resume.pdf"
 
 # --- Skill Truth Schemas ---
 class SkillTruthItem(BaseModel):
@@ -145,6 +197,51 @@ class InterviewEvidenceItem(BaseModel):
     evidence_bullets: List[str]
     weaknesses: List[str]
     question_references: List[int]
+
+class InterviewChatMessage(BaseModel):
+    role: str
+    content: str
+
+class InterviewChatRequest(BaseModel):
+    interview_id: Optional[str] = None
+    message: str
+    history: List[InterviewChatMessage] = []
+    interview_config: Optional[Dict[str, Any]] = None
+
+class InterviewEvaluationDetail(BaseModel):
+    answer_quality: int = 80
+    technical_knowledge: int = 80
+    problem_solving: int = 80
+    communication: int = 80
+    depth: int = 80
+    feedback: str = ""
+    strengths: List[str] = []
+    weaknesses: List[str] = []
+
+class InterviewFinalReportSchema(BaseModel):
+    overall_score: int = 82
+    technical_knowledge: int = 84
+    problem_solving: int = 80
+    communication: int = 85
+    answer_quality: int = 82
+    depth: int = 80
+    strengths: List[str] = []
+    weaknesses: List[str] = []
+    recommendations: List[str] = []
+    final_feedback: str = ""
+
+class InterviewChatResponse(BaseModel):
+    interview_id: str
+    stage: str
+    message: str
+    question: Optional[str] = None
+    current_question_num: int = 0
+    total_questions: int = 5
+    next_difficulty: Optional[str] = None
+    evaluation: Optional[InterviewEvaluationDetail] = None
+    final_report: Optional[InterviewFinalReportSchema] = None
+    interview_config: Optional[Dict[str, Any]] = None
+    is_completed: bool = False
 
 class InterviewRecommendationItem(BaseModel):
     id: Optional[int] = None

@@ -268,3 +268,24 @@ class ImprovementPlan(Base):
     priority_order = Column(JSON, default=list) # Priority list with justification
     is_completed = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+class PracticeSession(Base):
+    __tablename__ = "practice_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(String, unique=True, index=True, nullable=False)
+    user_email = Column(String, index=True, default="alex.mercer@demo.com")
+    practice_type = Column(String, nullable=False) # aptitude, coding, sql, ai-interview
+    title = Column(String, default="Practice Session")
+    topics = Column(JSON, default=list)
+    difficulty = Column(String, default="Medium")
+    score = Column(Float, default=0.0)
+    accuracy = Column(Float, default=0.0)
+    questions_attempted = Column(Integer, default=0)
+    total_questions = Column(Integer, default=0)
+    time_taken_seconds = Column(Integer, default=0)
+    status = Column(String, default="Completed")
+    metrics = Column(JSON, default=dict)
+    detailed_data = Column(JSON, default=dict)
+    completed_at = Column(DateTime, default=datetime.utcnow)
+

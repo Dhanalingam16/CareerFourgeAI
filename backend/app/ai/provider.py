@@ -13,22 +13,31 @@ class BaseAIProvider:
         raise NotImplementedError
 
 class GeminiProvider(BaseAIProvider):
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, model: str = "gemini-1.5-flash"):
         self.api_key = api_key
+        self.model = model or "gemini-1.5-flash"
 
     def generate_json(self, prompt: str, schema_class: Optional[Any] = None) -> Dict[str, Any]:
-        # Fallback to Mock if API call fails or key missing
         try:
             import requests
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.api_key}"
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent?key={self.api_key}"
             payload = {
-                "contents": [{"parts": [{"text": prompt + "\n\nReturn valid JSON only."}]}],
+                "contents": [{"parts": [{"text": prompt + "\n\nCRITICAL: Return raw valid JSON ONLY matching the requested structure. Do not wrap in markdown or markdown code blocks."}]}],
                 "generationConfig": {"responseMimeType": "application/json"}
             }
-            resp = requests.post(url, json=payload, timeout=10)
+            resp = requests.post(url, json=payload, timeout=25)
             if resp.status_code == 200:
-                result_text = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+                result_text = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+                if result_text.startswith("```"):
+                    lines = result_text.splitlines()
+                    if lines[0].startswith("```"):
+                        lines = lines[1:]
+                    if lines and lines[-1].startswith("```"):
+                        lines = lines[:-1]
+                    result_text = "\n".join(lines).strip()
                 return json.loads(result_text)
+            else:
+                logger.error(f"Gemini API error ({resp.status_code}): {resp.text}")
         except Exception as e:
             logger.warning(f"Gemini API call failed, falling back to Mock provider: {e}")
         return MockAIProvider().generate_json(prompt, schema_class)
@@ -36,11 +45,13 @@ class GeminiProvider(BaseAIProvider):
     def generate_text(self, prompt: str) -> str:
         try:
             import requests
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.api_key}"
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent?key={self.api_key}"
             payload = {"contents": [{"parts": [{"text": prompt}]}]}
-            resp = requests.post(url, json=payload, timeout=10)
+            resp = requests.post(url, json=payload, timeout=25)
             if resp.status_code == 200:
-                return resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+                return resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+            else:
+                logger.error(f"Gemini text API error ({resp.status_code}): {resp.text}")
         except Exception as e:
             logger.warning(f"Gemini text call failed: {e}")
         return MockAIProvider().generate_text(prompt)
@@ -52,6 +63,44 @@ class MockAIProvider(BaseAIProvider):
     """
     def generate_json(self, prompt: str, schema_class: Optional[Any] = None) -> Dict[str, Any]:
         prompt_lower = prompt.lower()
+        
+        if "ats" in prompt_lower or "applicant tracking system" in prompt_lower or "overall_score" in prompt_lower:
+            return {
+                "overall_score": 82,
+                "summary": "Parsed candidate resume text. Found core proficiency evidence in technical skills and relevant projects.",
+                "category_scores": {
+                    "ats_compatibility": 13, "content_quality": 12, "experience": 12,
+                    "technical_skills": 14, "projects": 8, "achievements": 7,
+                    "keywords": 8, "formatting": 4, "education": 3, "contact_information": 1
+                },
+                "strengths": ["Clear technical section structure", "Relevant software project experience"],
+                "weaknesses": ["Lack of quantified impact metrics in experience bullets"],
+                "improvements": [
+                    {
+                        "priority": "high",
+                        "section": "Experience",
+                        "problem": "Bullets lack metric outcomes.",
+                        "recommendation": "Add quantifiable numbers.",
+                        "example": "Developed REST APIs using FastAPI supporting [REAL NUMBER] requests."
+                    }
+                ],
+                "keyword_analysis": {
+                    "matched_keywords": ["Python", "FastAPI", "SQL", "React", "DSA"],
+                    "missing_keywords": ["Docker", "Kubernetes", "AWS"],
+                    "keyword_match_percentage": 75
+                },
+                "section_analysis": {
+                    "Header & Contact": 90, "Summary": 80, "Experience": 75,
+                    "Technical Skills": 85, "Projects": 70, "Education": 95
+                },
+                "ats_checklist": [
+                    {"item": "Contact Email", "passed": True, "note": "Present"}
+                ],
+                "final_recommendation": "Add measurable outcomes to experience bullet points.",
+                "job_match": None,
+                "target_role": "Software Engineer",
+                "filename": "Resume.pdf"
+            }
         
         if "skill truth" in prompt_lower or "claimed" in prompt_lower:
             return {
@@ -150,11 +199,46 @@ class MockAIProvider(BaseAIProvider):
                 "next_question_type": "adaptive_foundational"
             }
 
+        if "chat" in prompt_lower or "conversational setup" in prompt_lower:
+            if "stage: setup" in prompt_lower or "setup phase" in prompt_lower:
+                return {
+                    "stage": "setup",
+                    "interview_config": {
+                        "interview_type": "Technical",
+                        "target_role": "Software Engineer",
+                        "skills": ["Python", "FastAPI", "DSA"],
+                        "difficulty": "Medium",
+                        "num_questions": 5
+                    },
+                    "message": "Great. What role are you interviewing for?",
+                    "question": None,
+                    "is_completed": False
+                }
+            return {
+                "stage": "interview",
+                "current_question_num": 2,
+                "total_questions": 5,
+                "evaluation": {
+                    "answer_quality": 85,
+                    "technical_knowledge": 88,
+                    "problem_solving": 82,
+                    "communication": 80,
+                    "depth": 84,
+                    "feedback": "Clear explanation of backend API structure and middleware.",
+                    "strengths": ["Clear technical communication", "Accurate API design principles"],
+                    "weaknesses": ["Could expand on error status codes and rate limiting"]
+                },
+                "message": "Good explanation of your backend experience. For Question 2: How would you design rate-limiting middleware for these FastAPI endpoints?",
+                "question": "How would you design rate-limiting middleware for these FastAPI endpoints?",
+                "next_difficulty": "Medium",
+                "is_completed": False
+            }
+
         if "interview question" in prompt_lower or "generate_question" in prompt_lower:
             return {
-                "category": "DSA",
-                "target_skill": "Binary Search",
-                "question_text": "Can you explain how you would find the pivot element in a rotated sorted array in logarithmic O(log N) time?",
+                "category": "Technical",
+                "target_skill": "Backend Architecture",
+                "question_text": "Could you explain how you design and structure REST APIs for high-concurrency applications?",
                 "difficulty": "Intermediate",
                 "question_type": "adaptive_foundational"
             }
@@ -182,7 +266,86 @@ class MockAIProvider(BaseAIProvider):
     def generate_text(self, prompt: str) -> str:
         return "READYROLE AI analysis completed successfully."
 
+class GroqProvider(BaseAIProvider):
+    def __init__(self, api_key: str, model: str = "llama-3.3-70b-versatile"):
+        self.api_key = api_key
+        self.model = model or "llama-3.3-70b-versatile"
+        self.url = "https://api.groq.com/openai/v1/chat/completions"
+
+    def generate_json(self, prompt: str, schema_class: Optional[Any] = None) -> Dict[str, Any]:
+        try:
+            import requests
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "model": self.model,
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "You are a professional AI Interviewer and technical evaluator. Output only valid raw JSON matching the requested structure without any markdown wrap or code fence blocks."
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                "temperature": 0.5,
+                "response_format": {"type": "json_object"}
+            }
+            resp = requests.post(self.url, headers=headers, json=payload, timeout=25)
+            if resp.status_code == 200:
+                result_text = resp.json()["choices"][0]["message"]["content"].strip()
+                if result_text.startswith("```"):
+                    lines = result_text.splitlines()
+                    if lines[0].startswith("```"):
+                        lines = lines[1:]
+                    if lines and lines[-1].startswith("```"):
+                        lines = lines[:-1]
+                    result_text = "\n".join(lines).strip()
+                return json.loads(result_text)
+            else:
+                logger.error(f"Groq API error ({resp.status_code}): {resp.text}")
+        except Exception as e:
+            logger.warning(f"Groq API call failed, falling back to Mock provider: {e}")
+        return MockAIProvider().generate_json(prompt, schema_class)
+
+    def generate_text(self, prompt: str) -> str:
+        try:
+            import requests
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "model": self.model,
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "You are a professional AI Interviewer. Provide a direct, concise response."
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                "temperature": 0.6
+            }
+            resp = requests.post(self.url, headers=headers, json=payload, timeout=25)
+            if resp.status_code == 200:
+                return resp.json()["choices"][0]["message"]["content"].strip()
+            else:
+                logger.error(f"Groq text API error ({resp.status_code}): {resp.text}")
+        except Exception as e:
+            logger.warning(f"Groq text call failed: {e}")
+        return MockAIProvider().generate_text(prompt)
+
 def get_ai_provider() -> BaseAIProvider:
-    if settings.GEMINI_API_KEY and settings.AI_PROVIDER in ["auto", "gemini"]:
-        return GeminiProvider(settings.GEMINI_API_KEY)
+    if settings.GEMINI_API_KEY or settings.AI_PROVIDER in ["gemini", "auto"]:
+        if settings.GEMINI_API_KEY:
+            return GeminiProvider(settings.GEMINI_API_KEY, settings.GEMINI_MODEL)
+    if settings.GROQ_API_KEY and settings.AI_PROVIDER == "groq":
+        return GroqProvider(settings.GROQ_API_KEY, settings.GROQ_MODEL)
     return MockAIProvider()
+
