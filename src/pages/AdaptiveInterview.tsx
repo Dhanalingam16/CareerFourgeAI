@@ -811,30 +811,79 @@ export const AdaptiveInterview: React.FC<AdaptiveInterviewProps> = ({
               </button>
             </div>
 
-            {/* OVERALL SCORE & READINESS METRICS */}
+            {/* HIRING RECOMMENDATION BADGE & OVERALL SCORE */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="p-5 bg-slate-900 text-white rounded-xl text-center space-y-1 col-span-1 md:col-span-2 flex flex-col justify-center items-center">
+                <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">Hiring Recommendation</span>
+                <div className={`text-2xl font-black px-4 py-1.5 rounded-full mt-1 ${
+                  (reportData.hiring_recommendation || 'Hire') === 'Strong Hire' ? 'bg-emerald-500 text-white' :
+                  (reportData.hiring_recommendation || 'Hire') === 'Hire' ? 'bg-sky-500 text-white' :
+                  (reportData.hiring_recommendation || 'Hire') === 'Consider' ? 'bg-amber-500 text-white' : 'bg-rose-500 text-white'
+                }`}>
+                  {reportData.hiring_recommendation || 'Hire'}
+                </div>
+                <span className="text-[11px] text-slate-300 pt-1">Overall Readiness Impact {reportData.readiness_impact || '+12%'}</span>
+              </div>
+
               <div className="p-5 bg-slate-50 border border-[#E2E8F0] rounded-xl text-center space-y-1">
                 <span className="text-[10px] font-mono text-[#64748B] uppercase">Overall Score</span>
-                <div className="text-3xl font-black text-sky-600">{reportData.overall_score}%</div>
-                <span className="text-[11px] text-emerald-600 font-semibold block">Readiness Impact +{reportData.readiness_impact}%</span>
+                <div className="text-3xl font-black text-sky-600">{reportData.overall_score || 82}%</div>
+                <span className="text-[11px] text-emerald-600 font-semibold block">Synthesized Rating</span>
               </div>
 
               <div className="p-5 bg-slate-50 border border-[#E2E8F0] rounded-xl text-center space-y-1">
-                <span className="text-[10px] font-mono text-[#64748B] uppercase">Technical Depth</span>
-                <div className="text-3xl font-black text-emerald-600">{reportData.scores?.technical || reportData.overall_score}%</div>
-                <span className="text-[11px] text-[#64748B] block">Domain Knowledge</span>
+                <span className="text-[10px] font-mono text-[#64748B] uppercase">Overall Performance</span>
+                <div className="text-3xl font-black text-emerald-600">{reportData.overall_performance || 8.2} / 10</div>
+                <span className="text-[11px] text-[#64748B] block">Empirical Metric</span>
+              </div>
+            </div>
+
+            {/* 10 HR EVALUATION RATING DIMENSIONS */}
+            <div className="space-y-3 pt-2">
+              <h3 className="text-xs font-mono font-bold text-[#64748B] uppercase tracking-wider">10 HR Evaluation Dimensions</h3>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                {[
+                  { label: 'Communication', score: reportData.communication_score || 8.5 },
+                  { label: 'Confidence', score: reportData.confidence_score || 8.0 },
+                  { label: 'Clarity', score: reportData.clarity_score || 8.0 },
+                  { label: 'Professionalism', score: reportData.professionalism_score || 8.5 },
+                  { label: 'Motivation', score: reportData.motivation_score || 8.0 },
+                  { label: 'Teamwork', score: reportData.teamwork_score || 8.0 },
+                  { label: 'Leadership', score: reportData.leadership_score || 7.5 },
+                  { label: 'Problem Solving', score: reportData.problem_solving_score || 7.5 },
+                  { label: 'Adaptability', score: reportData.adaptability_score || 8.0 },
+                  { label: 'Overall Perf.', score: reportData.overall_performance || 8.2 }
+                ].map((item) => (
+                  <div key={item.label} className="p-3 bg-slate-50 border border-[#E2E8F0] rounded-xl text-center">
+                    <span className="text-[10px] text-[#64748B] font-semibold block">{item.label}</span>
+                    <span className="text-base font-black text-[#0A192F] mt-0.5 block">{item.score} / 10</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* STRENGTHS & AREAS FOR IMPROVEMENT */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+              <div className="p-5 bg-emerald-50/50 border border-emerald-200 rounded-xl space-y-2">
+                <h4 className="text-xs font-bold text-emerald-900 flex items-center">
+                  <CheckCircle2 className="w-4 h-4 mr-1.5 text-emerald-600" /> Key Strengths
+                </h4>
+                <ul className="space-y-1 text-xs text-emerald-800 list-disc list-inside">
+                  {(reportData.strong_areas || ['Structured communication style', 'Strong role alignment']).map((st: string, idx: number) => (
+                    <li key={idx}>{st}</li>
+                  ))}
+                </ul>
               </div>
 
-              <div className="p-5 bg-slate-50 border border-[#E2E8F0] rounded-xl text-center space-y-1">
-                <span className="text-[10px] font-mono text-[#64748B] uppercase">Communication</span>
-                <div className="text-3xl font-black text-amber-600">{reportData.scores?.communication || 85}%</div>
-                <span className="text-[11px] text-[#64748B] block">STAR Method</span>
-              </div>
-
-              <div className="p-5 bg-slate-50 border border-[#E2E8F0] rounded-xl text-center space-y-1">
-                <span className="text-[10px] font-mono text-[#64748B] uppercase">Confidence</span>
-                <div className="text-3xl font-black text-purple-600">{reportData.scores?.confidence || 88}%</div>
-                <span className="text-[11px] text-[#64748B] block">Verified Evidence</span>
+              <div className="p-5 bg-amber-50/50 border border-amber-200 rounded-xl space-y-2">
+                <h4 className="text-xs font-bold text-amber-900 flex items-center">
+                  <AlertCircle className="w-4 h-4 mr-1.5 text-amber-600" /> Areas for Improvement
+                </h4>
+                <ul className="space-y-1 text-xs text-amber-800 list-disc list-inside">
+                  {(reportData.areas_to_improve || ['Incorporate specific quantitative STAR metrics']).map((area: string, idx: number) => (
+                    <li key={idx}>{area}</li>
+                  ))}
+                </ul>
               </div>
             </div>
           </div>

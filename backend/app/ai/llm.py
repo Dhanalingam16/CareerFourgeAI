@@ -453,32 +453,46 @@ Return ONLY JSON:
             avg_tech = int(sum(tech_scores) / len(tech_scores))
             avg_comm = int(sum(comm_scores) / len(comm_scores))
 
+            rec = "Strong Hire" if avg_overall >= 85 else ("Hire" if avg_overall >= 75 else ("Consider" if avg_overall >= 60 else "Not Recommended"))
+
             return {
                 "overall_score": avg_overall,
                 "technical_knowledge": avg_tech,
                 "problem_solving": int((avg_overall + avg_tech) / 2),
                 "communication": avg_comm,
                 "answer_quality": avg_overall,
+                "communication_score": round(avg_comm / 10.0, 1),
+                "confidence_score": round(avg_comm / 10.0, 1),
+                "clarity_score": round(avg_comm / 10.0, 1),
+                "professionalism_score": round(avg_overall / 10.0, 1),
+                "motivation_score": round(avg_overall / 10.0, 1),
+                "teamwork_score": round(avg_overall / 10.0, 1),
+                "leadership_score": round(avg_tech / 10.0, 1),
+                "problem_solving_score": round(avg_tech / 10.0, 1),
+                "adaptability_score": round(avg_overall / 10.0, 1),
+                "overall_performance": round(avg_overall / 10.0, 1),
+                "hiring_recommendation": rec,
                 "strong_areas": [
-                    "Clear structural response delivery.",
-                    "Solid alignment with target position requirements."
+                    "Structured response delivery",
+                    "Solid alignment with target position requirements"
                 ],
                 "areas_to_improve": [
-                    "Elaborate on specific architectural trade-offs.",
-                    "Include quantitative performance metrics."
+                    "Elaborate with specific quantitative examples using STAR method",
+                    "Provide deeper technical trade-off details"
                 ],
-                "key_observations": f"Candidate demonstrated strong core capabilities for {role}. Solid overall performance.",
+                "key_observations": f"Candidate demonstrated solid capabilities for the {role} role.",
                 "readiness_impact": f"+{min(15, int(avg_overall / 6))}%",
                 "recommendations": [
-                    f"Practice advanced technical questions in {interview_type}.",
-                    "Focus on system design trade-offs and quantitative STAR method examples."
+                    f"Practice STAR methodology for behavioral questions",
+                    "Focus on quantitative impact metrics and career goal clarity"
                 ]
             }
 
         evaluation_text = json.dumps(evaluations, indent=2)
 
         system_prompt = (
-            "You are a senior technical recruiter creating an evidence-based interview report."
+            "You are CareerForge AI's senior HR recruiter creating a comprehensive evidence-based candidate assessment report.\n"
+            "Evaluate strictly based on demonstrated candidate evidence."
         )
 
         user_prompt = f"""TARGET ROLE:
@@ -493,19 +507,31 @@ INTERVIEW TYPE:
 INTERVIEW EVALUATIONS:
 {evaluation_text}
 
-Create a final interview assessment based ONLY on the supplied evaluations.
+Generate a complete HR evaluation report.
+Hiring recommendation MUST be one of: "Strong Hire", "Hire", "Consider", "Not Recommended".
 
 Return ONLY JSON:
 {{
-    "overall_score": 0,
-    "technical_knowledge": 0,
-    "problem_solving": 0,
-    "communication": 0,
-    "answer_quality": 0,
+    "communication_score": 8.5,
+    "confidence_score": 8.0,
+    "clarity_score": 8.0,
+    "professionalism_score": 8.5,
+    "motivation_score": 8.0,
+    "teamwork_score": 8.0,
+    "leadership_score": 7.5,
+    "problem_solving_score": 7.5,
+    "adaptability_score": 8.0,
+    "overall_performance": 8.2,
+    "overall_score": 82,
+    "technical_knowledge": 80,
+    "problem_solving": 78,
+    "communication": 85,
+    "answer_quality": 82,
+    "hiring_recommendation": "Strong Hire",
     "strong_areas": [],
     "areas_to_improve": [],
     "key_observations": "",
-    "readiness_impact": "",
+    "readiness_impact": "+12%",
     "recommendations": []
 }}
 """
@@ -523,9 +549,20 @@ Return ONLY JSON:
                 "problem_solving": 75,
                 "communication": 82,
                 "answer_quality": 77,
-                "strong_areas": ["Domain Knowledge", "Communication"],
-                "areas_to_improve": ["Complex System Trade-offs"],
-                "key_observations": "Good interview performance.",
+                "communication_score": 8.2,
+                "confidence_score": 8.0,
+                "clarity_score": 8.2,
+                "professionalism_score": 8.5,
+                "motivation_score": 8.0,
+                "teamwork_score": 8.0,
+                "leadership_score": 7.5,
+                "problem_solving_score": 7.5,
+                "adaptability_score": 8.0,
+                "overall_performance": 7.8,
+                "hiring_recommendation": "Hire",
+                "strong_areas": ["Communication", "Domain Knowledge"],
+                "areas_to_improve": ["Specific quantitative metrics"],
+                "key_observations": "Solid interview performance.",
                 "readiness_impact": "+12%",
-                "recommendations": ["Practice complex system design questions."]
+                "recommendations": ["Practice STAR methodology examples."]
             }

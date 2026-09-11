@@ -238,6 +238,20 @@ class ImpactLearningPriorityEngine:
             )
         ]
 
+REQUIRED_HR_QUESTIONS = [
+    "Tell me about yourself.",
+    "Why are you interested in this role?",
+    "What do you know about our company, and why would you like to work here?",
+    "What are your biggest strengths? Can you give me an example?",
+    "What is one weakness you're currently working on?",
+    "Tell me about a challenging situation you faced and how you handled it.",
+    "Tell me about a time you worked as part of a team. What was your contribution?",
+    "How do you handle pressure, failure, or criticism?",
+    "Why should we hire you?",
+    "Where do you see yourself in the next three to five years?",
+    "Do you have any questions for me?"
+]
+
 class AdaptiveInterviewEngine:
 
     # Shared state while backend is running.
@@ -257,9 +271,9 @@ class AdaptiveInterviewEngine:
     def start_interview(
         self,
         target_role: str = "Software Engineer",
-        interview_type: str = "Technical",
+        interview_type: str = "Behavioral / HR",
         difficulty: str = "Intermediate",
-        num_questions: int = 10,
+        num_questions: int = 11,
         job_description: str | None = None,
         target_company: str | None = None,
         focus_skills: list[str] | None = None,
@@ -282,15 +296,9 @@ class AdaptiveInterviewEngine:
             focus_skills or []
         )
 
-        # DEBUG LOGGING (Requirement 2)
-        print("\n========== INTERVIEW DEBUG ==========")
-        print("TARGET ROLE:", target_role)
-        print("INTERVIEW TYPE:", interview_type)
-        print("DIFFICULTY:", difficulty)
-        print("JOB DESCRIPTION:")
-        print(job_description)
-        print("FOCUS SKILLS:", focus_skills)
-        print("=====================================\n")
+        is_hr_mode = "hr" in interview_type.lower() or "behavioral" in interview_type.lower()
+        if is_hr_mode:
+            num_questions = 11
 
         # -----------------------------------------------------
         # FALLBACK JD
@@ -325,10 +333,13 @@ class AdaptiveInterviewEngine:
 
             "difficulty": difficulty,
 
-            "num_questions": max(
-                1,
-                min(num_questions, 30)
-            ),
+            "num_questions": num_questions if is_hr_mode else max(1, min(num_questions, 30)),
+
+            "is_hr_mode": is_hr_mode,
+
+            "required_hr_idx": 0,
+
+            "in_followup": False,
 
             "job_description": job_description,
 
@@ -353,6 +364,21 @@ class AdaptiveInterviewEngine:
             interview_id,
             job_description
         )
+
+        if is_hr_mode:
+            q_text = "Hello, welcome to your HR interview. Let's begin. Tell me about yourself."
+            question = {
+                "question_id": 1,
+                "interview_id": interview_id,
+                "sequence_num": 1,
+                "total_budget": 11,
+                "category": "HR Interview",
+                "target_skill": "Background & Communication",
+                "question_text": q_text,
+                "difficulty": difficulty,
+            }
+            self._interviews[interview_id]["questions"].append(question)
+            return question
 
         # -----------------------------------------------------
         # FIRST QUESTION CONTEXT
@@ -597,7 +623,27 @@ class AdaptiveInterviewEngine:
         # COMPLETED?
         # -----------------------------------------------------
 
-        if question_number >= interview["num_questions"]:
+        is_hr_mode = interview.get("is_hr_mode", False)
+
+        if is_hr_mode:
+            interview["required_hr_idx"] += 1
+            if interview["required_hr_idx"] >= 11:
+                interview["completed"] = True
+                return {
+                    "interview_id": interview_id,
+                    "question_id": question_id,
+                    "evaluation": eval_schema_dict,
+                    "clarity_score": clarity / 100.0,
+                    "relevance_score": relevance / 100.0,
+                    "technical_depth_score": technical / 100.0,
+                    "discovered_weakness": ", ".join(evaluation.get("weaknesses", [])),
+                    "feedback": "Thank you for your time. That concludes the interview.",
+                    "is_followup_needed": False,
+                    "is_completed": True,
+                    "next_question": None,
+                }
+
+        elif question_number >= interview["num_questions"]:
 
             interview["completed"] = True
 
@@ -643,8 +689,45 @@ class AdaptiveInterviewEngine:
             }
 
         # -----------------------------------------------------
-        # ADAPTIVE DIFFICULTY
+        # ADAPTIVE DIFFICULTY / HR QUESTION PROGRESSION
         # -----------------------------------------------------
+
+        if is_hr_mode:
+            next_idx = interview["required_hr_idx"]
+            next_required_q = REQUIRED_HR_QUESTIONS[next_idx]
+            acks = ["That's interesting.", "Thanks for explaining that.", "I understand.", "That's helpful context.", "Thank you for sharing."]
+            ack = acks[next_idx % len(acks)]
+            
+            # Format single question with brief natural acknowledgment (Rule 5 & Rule 6)
+            next_q_text = f"{ack} {next_required_q}" if next_idx > 0 else next_required_q
+            next_question_id = question_number + 1
+
+            next_question = {
+                "question_id": next_question_id,
+                "interview_id": interview_id,
+                "sequence_num": next_idx + 1,
+                "total_budget": 11,
+                "category": "HR Interview",
+                "target_skill": f"Q{next_idx + 1} Behavioral",
+                "question_text": next_q_text,
+                "difficulty": interview["difficulty"],
+            }
+
+            interview["questions"].append(next_question)
+
+            return {
+                "interview_id": interview_id,
+                "question_id": question_id,
+                "evaluation": eval_schema_dict,
+                "clarity_score": clarity / 100.0,
+                "relevance_score": relevance / 100.0,
+                "technical_depth_score": technical / 100.0,
+                "discovered_weakness": ", ".join(evaluation.get("weaknesses", [])),
+                "feedback": evaluation.get("feedback", ""),
+                "is_followup_needed": False,
+                "is_completed": False,
+                "next_question": next_question,
+            }
 
         recommended_difficulty = (
             evaluation.get(
@@ -918,22 +1001,55 @@ class AdaptiveInterviewEngine:
             "answer_quality":
                 float(report.get("answer_quality", overall_sc)),
 
+            "communication_score":
+                float(report.get("communication_score", round(overall_sc / 10.0, 1))),
+
+            "confidence_score":
+                float(report.get("confidence_score", round(overall_sc / 10.0, 1))),
+
+            "clarity_score":
+                float(report.get("clarity_score", round(overall_sc / 10.0, 1))),
+
+            "professionalism_score":
+                float(report.get("professionalism_score", round(overall_sc / 10.0, 1))),
+
+            "motivation_score":
+                float(report.get("motivation_score", round(overall_sc / 10.0, 1))),
+
+            "teamwork_score":
+                float(report.get("teamwork_score", round(overall_sc / 10.0, 1))),
+
+            "leadership_score":
+                float(report.get("leadership_score", round(overall_sc / 10.0, 1))),
+
+            "problem_solving_score":
+                float(report.get("problem_solving_score", round(overall_sc / 10.0, 1))),
+
+            "adaptability_score":
+                float(report.get("adaptability_score", round(overall_sc / 10.0, 1))),
+
+            "overall_performance":
+                float(report.get("overall_performance", round(overall_sc / 10.0, 1))),
+
+            "hiring_recommendation":
+                report.get("hiring_recommendation", "Hire"),
+
             "strong_areas":
                 report.get(
                     "strong_areas",
-                    ["Python Fundamentals", "Communication"]
+                    ["Communication", "Domain Alignment"]
                 ),
 
             "areas_to_improve":
                 report.get(
                     "areas_to_improve",
-                    ["DSA Complexity Analysis", "System Design Trade-offs"]
+                    ["Quantitative impact metrics", "STAR method structure"]
                 ),
 
             "key_observations":
                 report.get(
                     "key_observations",
-                    "Demonstrated good domain understanding during the session."
+                    "Demonstrated solid overall candidate alignment."
                 ),
 
             "readiness_impact":
